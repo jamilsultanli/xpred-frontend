@@ -146,32 +146,19 @@ export function OnboardingFlow() {
     }
   };
 
-  // Fetch suggested users when step 5 is reached
-  useEffect(() => {
-    if (step === 5 && !isLoadingSuggestedUsers && suggestedUsers.length === 0) {
-      fetchSuggestedUsers();
-    }
-  }, [step]);
+  // CRITICAL: Early return AFTER all hooks are declared
+  if (!showOnboarding) {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingFlow.tsx:148',message:'OnboardingFlow early return - not showing',data:{showOnboarding},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    return null;
+  }
 
-  const fetchSuggestedUsers = async () => {
-    setIsLoadingSuggestedUsers(true);
-    try {
-      const response = await usersApi.getSuggestedUsers(selectedInterests, 10);
-      if (response.success && response.users) {
-        setSuggestedUsers(response.users);
-        // Pre-populate followed users based on isFollowing flag
-        const alreadyFollowing = response.users
-          .filter((user: any) => user.isFollowing)
-          .map((user: any) => user.id);
-        setFollowedUsers(alreadyFollowing);
-      }
-    } catch (error: any) {
-      console.error('Error fetching suggested users:', error);
-      toast.error('Failed to load suggested users');
-    } finally {
-      setIsLoadingSuggestedUsers(false);
-    }
-  };
+  // #region agent log
+  fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingFlow.tsx:155',message:'OnboardingFlow rendering JSX',data:{showOnboarding,step},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
+
+  const totalSteps = 5;
 
   const handleNext = () => {
     if (step === 1 && selectedInterests.length === 0) return;
