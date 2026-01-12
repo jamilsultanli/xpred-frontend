@@ -180,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   }
                   setIsInitializing(false);
                 }
+              } else if (isMounted) {
+                setIsInitializing(false);
               }
             } catch (error: any) {
               // Token is invalid or expired, clear it silently
@@ -188,13 +190,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               localStorage.removeItem('user_data_timestamp');
               requestCache.clear(cacheKeys.user());
               apiClient.setToken(null);
+              if (isMounted) {
+                setIsInitializing(false);
+              }
             }
+          } else if (isMounted) {
+            // No token found
+            setIsInitializing(false);
           }
+        } else if (isMounted) {
+          // Not in browser environment
+          setIsInitializing(false);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
-      } finally {
-        setIsInitializing(false);
+        if (isMounted) {
+          setIsInitializing(false);
+        }
       }
     };
 
