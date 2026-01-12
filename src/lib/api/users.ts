@@ -43,5 +43,28 @@ export const usersApi = {
   getFollowing: async (username: string, page: number = 1, limit: number = 20) => {
     return apiClient.get(`/users/${username}/following?page=${page}&limit=${limit}`);
   },
+
+  checkUsernameAvailability: async (username: string) => {
+    return apiClient.get(`/users/check-username/${encodeURIComponent(username)}`);
+  },
+
+  getSuggestedUsers: async (interests?: string[], limit: number = 10) => {
+    const params = new URLSearchParams();
+    if (interests && interests.length > 0) {
+      params.set('interests', interests.join(','));
+    }
+    params.set('limit', limit.toString());
+    return apiClient.get(`/users/suggested?${params.toString()}`);
+  },
+
+  completeOnboarding: async (data: {
+    username?: string;
+    bio?: string;
+    avatar_url?: string;
+    interests?: string[];
+    follow_user_ids?: string[];
+  }) => {
+    return apiClient.post('/users/complete-onboarding', data);
+  },
 };
 

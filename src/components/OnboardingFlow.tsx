@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { X, Check, User, Camera, Sparkles, Users as UsersIcon } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, Check, User, Camera, Sparkles, Users as UsersIcon, Loader2 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { usersApi } from '../lib/api/users';
+import { socialApi } from '../lib/api/social';
+import { toast } from 'sonner';
 
 const categories = [
   { id: 'technology', label: 'Technology', emoji: '💻', color: 'from-blue-500 to-cyan-500' },
@@ -12,17 +15,6 @@ const categories = [
   { id: 'global', label: 'Global Events', emoji: '🌍', color: 'from-teal-500 to-blue-500' },
   { id: 'science', label: 'Science', emoji: '🔬', color: 'from-indigo-500 to-purple-500' },
   { id: 'business', label: 'Business', emoji: '💼', color: 'from-gray-500 to-slate-500' },
-];
-
-const suggestedUsers = [
-  { id: '1', username: 'techguru', displayName: 'Tech Guru', bio: 'AI & Technology Expert | 92% Accuracy', followers: '45.2K', category: 'technology' },
-  { id: '2', username: 'cryptoking', displayName: 'Crypto King', bio: 'Cryptocurrency Analyst | Top Predictor', followers: '38.7K', category: 'crypto' },
-  { id: '3', username: 'sportsfan', displayName: 'Sports Fan', bio: 'Sports Prediction Specialist', followers: '32.1K', category: 'sports' },
-  { id: '4', username: 'politico', displayName: 'Political Analyst', bio: 'Politics & Elections Expert', followers: '28.4K', category: 'politics' },
-  { id: '5', username: 'moviebuff', displayName: 'Movie Buff', bio: 'Entertainment Industry Insider', followers: '24.8K', category: 'entertainment' },
-  { id: '6', username: 'globalwatch', displayName: 'Global Watcher', bio: 'World Events & Trends', followers: '21.3K', category: 'global' },
-  { id: '7', username: 'sciencegeek', displayName: 'Science Geek', bio: 'Science & Research Enthusiast', followers: '19.7K', category: 'science' },
-  { id: '8', username: 'bizpro', displayName: 'Business Pro', bio: 'Business & Market Expert', followers: '17.2K', category: 'business' },
 ];
 
 export function OnboardingFlow() {
@@ -36,6 +28,11 @@ export function OnboardingFlow() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [followedUsers, setFollowedUsers] = useState<string[]>([]);
   const [usernameError, setUsernameError] = useState('');
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [isUsernameAvailable, setIsUsernameAvailable] = useState<boolean | null>(null);
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+  const [isLoadingSuggestedUsers, setIsLoadingSuggestedUsers] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   if (!showOnboarding) return null;
 
@@ -49,24 +46,109 @@ export function OnboardingFlow() {
     }
   };
 
+  // Debounced username check
+  useEffect(() => {
+    if (username.length < 3) {
+      setUsernameError('Username must be at least 3 characters');
+      setIsUsernameAvailable(null);
+      return;
+    }
+
+    if (username.length > 15) {
+      setUsernameError('Username must be less than 15 characters');
+      setIsUsernameAvailable(null);
+      return;
+    }
+
+    // Check if username matches valid pattern
+    if (!/^[a-z0-9_]+$/.test(username)) {
+      setUsernameError('Username can only contain letters, numbers, and underscores');
+      setIsUsernameAvailable(null);
+      return;
+    }
+
+    // Debounce the API call
+    const timeoutId = setTimeout(async () => {
+      setIsCheckingUsername(true);
+      setUsernameError('');
+      try {
+        const response = await usersApi.checkUsernameAvailability(username);
+        if (response.success) {
+          if (response.available) {
+            setIsUsernameAvailable(true);
+            setUsernameError('');
+          } else {
+            setIsUsernameAvailable(false);
+            setUsernameError(response.message || 'Username is already taken');
+          }
+        } else {
+          setIsUsernameAvailable(false);
+          setUsernameError('Error checking username');
+        }
+      } catch (error: any) {
+        setIsUsernameAvailable(false);
+        setUsernameError(error?.response?.data?.message || 'Error checking username');
+      } finally {
+        setIsCheckingUsername(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [username]);
+
   const handleUsernameChange = (value: string) => {
     const sanitized = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
     setUsername(sanitized);
-    
-    if (sanitized.length < 3) {
-      setUsernameError('Username must be at least 3 characters');
-    } else if (sanitized.length > 15) {
-      setUsernameError('Username must be less than 15 characters');
+  };
+
+  const handleFollowToggle = async (userId: string) => {
+    if (followedUsers.includes(userId)) {
+      setFollowedUsers(followedUsers.filter(id => id !== userId));
+      // Unfollow via API
+      try {
+        await socialApi.unfollowUser(userId);
+      } catch (error) {
+        // Revert on error
+        setFollowedUsers([...followedUsers, userId]);
+        toast.error('Failed to unfollow user');
+      }
     } else {
-      setUsernameError('');
+      setFollowedUsers([...followedUsers, userId]);
+      // Follow via API
+      try {
+        await socialApi.followUser(userId);
+      } catch (error) {
+        // Revert on error
+        setFollowedUsers(followedUsers.filter(id => id !== userId));
+        toast.error('Failed to follow user');
+      }
     }
   };
 
-  const handleFollowToggle = (userId: string) => {
-    if (followedUsers.includes(userId)) {
-      setFollowedUsers(followedUsers.filter(id => id !== userId));
-    } else {
-      setFollowedUsers([...followedUsers, userId]);
+  // Fetch suggested users when step 5 is reached
+  useEffect(() => {
+    if (step === 5 && !isLoadingSuggestedUsers && suggestedUsers.length === 0) {
+      fetchSuggestedUsers();
+    }
+  }, [step]);
+
+  const fetchSuggestedUsers = async () => {
+    setIsLoadingSuggestedUsers(true);
+    try {
+      const response = await usersApi.getSuggestedUsers(selectedInterests, 10);
+      if (response.success && response.users) {
+        setSuggestedUsers(response.users);
+        // Pre-populate followed users based on isFollowing flag
+        const alreadyFollowing = response.users
+          .filter((user: any) => user.isFollowing)
+          .map((user: any) => user.id);
+        setFollowedUsers(alreadyFollowing);
+      }
+    } catch (error: any) {
+      console.error('Error fetching suggested users:', error);
+      toast.error('Failed to load suggested users');
+    } finally {
+      setIsLoadingSuggestedUsers(false);
     }
   };
 
@@ -79,26 +161,46 @@ export function OnboardingFlow() {
     }
   };
 
-  const handleComplete = () => {
-    updateUserData({
-      username,
-      bio,
-      avatar: avatarUrl || undefined,
-      interests: selectedInterests,
-      following: followedUsers,
-    });
-    completeOnboarding();
+  const handleComplete = async () => {
+    setIsCompleting(true);
+    try {
+      // Save onboarding data to backend
+      const response = await usersApi.completeOnboarding({
+        username: username || undefined,
+        bio: bio || undefined,
+        avatar_url: avatarUrl || undefined,
+        interests: selectedInterests,
+        follow_user_ids: followedUsers,
+      });
+
+      if (response.success) {
+        // Update local user data
+        updateUserData({
+          username,
+          bio,
+          avatar: avatarUrl || undefined,
+          interests: selectedInterests,
+          following: followedUsers,
+        });
+        
+        toast.success('Onboarding completed!');
+        completeOnboarding();
+      } else {
+        toast.error(response.message || 'Failed to complete onboarding');
+      }
+    } catch (error: any) {
+      console.error('Error completing onboarding:', error);
+      toast.error(error?.response?.data?.message || 'Failed to complete onboarding');
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   const canProceed = () => {
     if (step === 1) return selectedInterests.length > 0;
-    if (step === 2) return username.length >= 3 && !usernameError;
+    if (step === 2) return username.length >= 3 && !usernameError && isUsernameAvailable === true;
     return true;
   };
-
-  const filteredSuggestedUsers = suggestedUsers.filter(user => 
-    selectedInterests.includes(user.category)
-  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -200,15 +302,29 @@ export function OnboardingFlow() {
                     placeholder="username"
                     maxLength={15}
                   />
-                  {username.length >= 3 && !usernameError && (
+                  {isCheckingUsername && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                    </div>
+                  )}
+                  {!isCheckingUsername && username.length >= 3 && isUsernameAvailable === true && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
                       <Check className="w-6 h-6 text-green-500" />
                     </div>
                   )}
+                  {!isCheckingUsername && username.length >= 3 && isUsernameAvailable === false && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <X className="w-6 h-6 text-red-500" />
+                    </div>
+                  )}
                 </div>
-                {usernameError ? (
+                {isCheckingUsername ? (
+                  <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Checking availability...
+                  </p>
+                ) : usernameError ? (
                   <p className="text-red-500 text-sm mt-2">{usernameError}</p>
-                ) : username.length >= 3 ? (
+                ) : username.length >= 3 && isUsernameAvailable === true ? (
                   <p className="text-green-500 text-sm mt-2">Username is available!</p>
                 ) : (
                   <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -352,43 +468,64 @@ export function OnboardingFlow() {
                 </p>
               </div>
 
-              <div className="space-y-3">
-                {(filteredSuggestedUsers.length > 0 ? filteredSuggestedUsers : suggestedUsers.slice(0, 6)).map((user) => (
-                  <div
-                    key={user.id}
-                    className={`p-4 rounded-xl border transition-all ${
-                      isDark ? 'border-gray-800 hover:bg-[#1a1a1a]' : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full"></div>
-                        <div className="flex-1">
-                          <div className="font-bold">{user.displayName}</div>
-                          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                            @{user.username}
-                          </div>
-                          <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
-                            {user.bio} • {user.followers} followers
+              {isLoadingSuggestedUsers ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                </div>
+              ) : suggestedUsers.length > 0 ? (
+                <div className="space-y-3">
+                  {suggestedUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        isDark ? 'border-gray-800 hover:bg-[#1a1a1a]' : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {user.avatar_url ? (
+                            <img 
+                              src={user.avatar_url} 
+                              alt={user.displayName}
+                              className="w-12 h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                              <User className="w-6 h-6 text-white" />
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            <div className="font-bold">{user.displayName}</div>
+                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                              @{user.username}
+                            </div>
+                            <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
+                              {user.bio} • {user.followers} {user.followers === 1 ? 'follower' : 'followers'} • {user.predictions} predictions
+                            </div>
                           </div>
                         </div>
+                        <button
+                          onClick={() => handleFollowToggle(user.id)}
+                          disabled={isCompleting}
+                          className={`px-6 py-2 rounded-full font-bold transition-all ${
+                            followedUsers.includes(user.id)
+                              ? isDark 
+                                ? 'bg-gray-800 text-white hover:bg-gray-700' 
+                                : 'bg-gray-200 text-black hover:bg-gray-300'
+                              : 'bg-white text-black hover:bg-gray-200'
+                          } disabled:opacity-50`}
+                        >
+                          {followedUsers.includes(user.id) ? 'Following' : 'Follow'}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleFollowToggle(user.id)}
-                        className={`px-6 py-2 rounded-full font-bold transition-all ${
-                          followedUsers.includes(user.id)
-                            ? isDark 
-                              ? 'bg-gray-800 text-white hover:bg-gray-700' 
-                              : 'bg-gray-200 text-black hover:bg-gray-300'
-                            : 'bg-white text-black hover:bg-gray-200'
-                        }`}
-                      >
-                        {followedUsers.includes(user.id) ? 'Following' : 'Follow'}
-                      </button>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  No suggested users found. You can skip this step.
+                </div>
+              )}
 
               <div className={`text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 {followedUsers.length} user{followedUsers.length !== 1 ? 's' : ''} selected
@@ -439,9 +576,17 @@ export function OnboardingFlow() {
             ) : (
               <button
                 onClick={handleComplete}
-                className="px-8 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full font-bold transition-all"
+                disabled={isCompleting}
+                className="px-8 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full font-bold transition-all flex items-center gap-2"
               >
-                Get Started
+                {isCompleting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Completing...</span>
+                  </>
+                ) : (
+                  'Get Started'
+                )}
               </button>
             )}
           </div>
