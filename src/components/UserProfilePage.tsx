@@ -77,6 +77,13 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
   const [isLoadingFollow, setIsLoadingFollow] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
 
+  // Handle profile click navigation
+  const onProfileClick = (clickedUsername: string) => {
+    if (clickedUsername && clickedUsername !== username) {
+      navigate(`/user/${clickedUsername}`);
+    }
+  };
+
   useEffect(() => {
     if (username) {
       // Reset state when username changes

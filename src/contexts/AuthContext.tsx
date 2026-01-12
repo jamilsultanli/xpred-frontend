@@ -11,6 +11,7 @@ interface UserData {
   bio?: string;
   interests?: string[];
   following?: string[];
+  created_at?: string;
 }
 
 interface AuthContextType {
@@ -83,9 +84,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 localStorage.setItem('user_data_timestamp', now.toString());
                 console.log('✅ User data fetched and cached');
                 
-                // Only show onboarding if user has no username (new user)
+                // Show onboarding for new users who haven't completed it
+                // Check if user was created recently (within last 5 minutes) or has no custom username
                 const hasCompletedOnboarding = localStorage.getItem('onboarding_completed');
-                if (!userResponse.user.username && !hasCompletedOnboarding) {
+                const userCreatedAt = userResponse.user.created_at ? new Date(userResponse.user.created_at) : null;
+                const isNewUser = userCreatedAt && (Date.now() - userCreatedAt.getTime()) < 5 * 60 * 1000; // 5 minutes
+                const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
+                  userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
+                
+                if (!hasCompletedOnboarding && (isNewUser || hasDefaultUsername || !userResponse.user.username)) {
                   setShowOnboarding(true);
                 } else {
                   setIsAuthenticated(true);
@@ -114,9 +121,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (data?: UserData) => {
     if (data) {
       setUserData(data);
-      // Only show onboarding for new users without username
+      // Show onboarding for new users who haven't completed it
       const hasCompletedOnboarding = localStorage.getItem('onboarding_completed');
-      if (!data.username && !hasCompletedOnboarding) {
+      const hasDefaultUsername = data.username && data.email && 
+        data.username.toLowerCase() === data.email.split('@')[0].toLowerCase();
+      
+      // Check if user was created recently (within last 5 minutes)
+      const userCreatedAt = data.created_at ? new Date(data.created_at) : null;
+      const isNewUser = userCreatedAt && (Date.now() - userCreatedAt.getTime()) < 5 * 60 * 1000; // 5 minutes
+      
+      if (!hasCompletedOnboarding && (isNewUser || hasDefaultUsername || !data.username)) {
         setShowOnboarding(true);
       } else {
         setIsAuthenticated(true);

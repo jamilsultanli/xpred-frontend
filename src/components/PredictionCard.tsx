@@ -454,7 +454,7 @@ export function PredictionCard({ prediction, onProfileClick, onDelete }: Predict
                   </div>
                   <div className="flex justify-between mt-1 text-xs">
                     <span className="text-green-400">Y {prediction.yesPercentXP}%</span>
-                    <span className="text-red-400">N {prediction.noPercentXP}%</span>
+                    <span className="text-blue-400">N {prediction.noPercentXP}%</span>
                   </div>
                 </div>
                 
@@ -471,7 +471,7 @@ export function PredictionCard({ prediction, onProfileClick, onDelete }: Predict
                   </div>
                   <div className="flex justify-between mt-1 text-xs">
                     <span className="text-green-400">Y {prediction.yesPercentXC}%</span>
-                    <span className="text-red-400">N {prediction.noPercentXC}%</span>
+                    <span className="text-blue-400">N {prediction.noPercentXC}%</span>
                   </div>
                 </div>
               </div>
@@ -490,11 +490,11 @@ export function PredictionCard({ prediction, onProfileClick, onDelete }: Predict
                 <button 
                   onClick={(e) => !isExpired && !isMyPost && handleBet(e, 'no')}
                   disabled={isExpired || isResolved || isMyPost}
-                  className={`bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 rounded-lg lg:rounded-xl py-2 lg:py-3 px-3 lg:px-4 font-bold transition-all transform active:scale-95 text-white text-sm lg:text-base ${(isExpired || isResolved || isMyPost) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  className={`bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-lg lg:rounded-xl py-2 lg:py-3 px-3 lg:px-4 font-bold transition-all transform active:scale-95 text-white text-sm lg:text-base ${(isExpired || isResolved || isMyPost) ? 'opacity-40 cursor-not-allowed' : ''}`}
                 >
                   <div className="flex items-center justify-between">
                     <span>No</span>
-                    <span className="text-red-100 text-xs lg:text-sm">{prediction.noMultiplier}</span>
+                    <span className="text-blue-100 text-xs lg:text-sm">{prediction.noMultiplier}</span>
                   </div>
                 </button>
               </div>

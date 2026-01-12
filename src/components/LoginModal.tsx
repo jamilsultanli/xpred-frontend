@@ -37,12 +37,15 @@ export function LoginModal() {
 
         if (response.success && response.user) {
           toast.success('Account created successfully!');
+          // Clear onboarding completed flag for new users to ensure onboarding shows
+          localStorage.removeItem('onboarding_completed');
           login({
             email: response.user.email || formData.email,
             name: response.user.full_name || formData.name,
             username: response.user.username,
             avatar: response.user.avatar_url,
             bio: response.user.bio,
+            created_at: response.user.created_at, // Pass created_at to detect new user
           });
         } else {
           setError(response.message || 'Registration failed');
