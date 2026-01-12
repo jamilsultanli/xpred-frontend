@@ -34,11 +34,6 @@ export function OnboardingFlow() {
   const [isLoadingSuggestedUsers, setIsLoadingSuggestedUsers] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
 
-  // #region agent log
-  useEffect(() => {
-    fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingFlow.tsx:37',message:'OnboardingFlow render',data:{showOnboarding,step},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-  }, [showOnboarding, step]);
-  // #endregion
 
   // Fetch suggested users when step 5 is reached
   useEffect(() => {
@@ -148,15 +143,8 @@ export function OnboardingFlow() {
 
   // CRITICAL: Early return AFTER all hooks are declared
   if (!showOnboarding) {
-    // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingFlow.tsx:148',message:'OnboardingFlow early return - not showing',data:{showOnboarding},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
     return null;
   }
-
-  // #region agent log
-  fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingFlow.tsx:155',message:'OnboardingFlow rendering JSX',data:{showOnboarding,step},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-  // #endregion
 
   const totalSteps = 5;
 
