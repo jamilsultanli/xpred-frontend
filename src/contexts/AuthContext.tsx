@@ -101,16 +101,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       setIsAuthenticated(true);
                     }
                     
-                    setIsInitializing(false);
+                    if (isMounted) {
+                      setIsInitializing(false);
+                    }
                     return;
                   }
                 } catch (error: any) {
                   console.error('Error fetching user after email verification:', error);
                   toast.error('Failed to load user data. Please try logging in.');
+                  if (isMounted) {
+                    setIsInitializing(false);
+                  }
+                }
+              } else {
+                if (isMounted) {
+                  setIsInitializing(false);
                 }
               }
             } catch (error: any) {
               console.error('Error parsing email verification hash:', error);
+              // Continue to normal auth flow
             }
           }
           
@@ -124,15 +134,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Use cached data if less than 5 minutes old
             if (cachedUser && cachedTimestamp && now - parseInt(cachedTimestamp) < CacheTime.LONG) {
               console.log('⚡ Using cached user data (AuthContext)');
-              setIsAuthenticated(true);
-              setUserData({
-                email: cachedUser.email || '',
-                name: cachedUser.full_name || cachedUser.username || '',
-                username: cachedUser.username,
-                avatar: cachedUser.avatar_url,
-                bio: cachedUser.bio,
-              });
-              setIsInitializing(false);
+              if (isMounted) {
+                setIsAuthenticated(true);
+                setUserData({
+                  email: cachedUser.email || '',
+                  name: cachedUser.full_name || cachedUser.username || '',
+                  username: cachedUser.username,
+                  avatar: cachedUser.avatar_url,
+                  bio: cachedUser.bio,
+                });
+                setIsInitializing(false);
+              }
               return;
             }
             
@@ -149,25 +161,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   bio: userResponse.user.bio,
                 };
                 
-                setUserData(userData);
-                
-                // Cache user data for 5 minutes
-                requestCache.set(cacheKeys.user(), userResponse.user, CacheTime.LONG);
-                localStorage.setItem('user_data_timestamp', now.toString());
-                console.log('✅ User data fetched and cached');
-                
-                // Show onboarding for new users who haven't completed it
-                // Check if user was created recently (within last 5 minutes) or has no custom username
-                const hasCompletedOnboarding = localStorage.getItem('onboarding_completed');
-                const userCreatedAt = userResponse.user.created_at ? new Date(userResponse.user.created_at) : null;
-                const isNewUser = userCreatedAt && (Date.now() - userCreatedAt.getTime()) < 5 * 60 * 1000; // 5 minutes
-                const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
-                  userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
-                
-                if (!hasCompletedOnboarding && (isNewUser || hasDefaultUsername || !userResponse.user.username)) {
-                  setShowOnboarding(true);
-                } else {
-                  setIsAuthenticated(true);
+                if (isMounted) {
+                  setUserData(userData);
+                  
+                  // Cache user data for 5 minutes
+                  requestCache.set(cacheKeys.user(), userResponse.user, CacheTime.LONG);
+                  localStorage.setItem('user_data_timestamp', now.toString());
+                  console.log('✅ User data fetched and cached');
+                  
+                  // Show onboarding for new users who haven't completed it
+                  // Check if user was created recently (within last 5 minutes) or has no custom username
+                  const hasCompletedOnboarding = localStorage.getItem('onboarding_completed');
+                  const userCreatedAt = userResponse.user.created_at ? new Date(userResponse.user.created_at) : null;
+                  const isNewUser = userCreatedAt && (Date.now() - userCreatedAt.getTime()) < 5 * 60 * 1000; // 5 minutes
+                  const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
+                    userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
+                  
+                  if (!hasCompletedOnboarding && (isNewUser || hasDefaultUsername || !userResponse.user.username)) {
+                    setShowOnboarding(true);
+                  } else {
+                    setIsAuthenticated(true);
+                  }
+                  setIsInitializing(false);
                 }
               }
             } catch (error: any) {
