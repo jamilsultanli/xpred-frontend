@@ -34,19 +34,40 @@ export function OnboardingFlow() {
   const [isLoadingSuggestedUsers, setIsLoadingSuggestedUsers] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
 
-  if (!showOnboarding) return null;
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'OnboardingFlow.tsx:37',message:'OnboardingFlow render',data:{showOnboarding,step},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  }, [showOnboarding, step]);
+  // #endregion
 
-  const totalSteps = 5;
+  // Fetch suggested users when step 5 is reached
+  useEffect(() => {
+    if (step === 5 && !isLoadingSuggestedUsers && suggestedUsers.length === 0) {
+      fetchSuggestedUsers();
+    }
+  }, [step]);
 
-  const handleInterestToggle = (categoryId: string) => {
-    if (selectedInterests.includes(categoryId)) {
-      setSelectedInterests(selectedInterests.filter(id => id !== categoryId));
-    } else {
-      setSelectedInterests([...selectedInterests, categoryId]);
+  const fetchSuggestedUsers = async () => {
+    setIsLoadingSuggestedUsers(true);
+    try {
+      const response = await usersApi.getSuggestedUsers(selectedInterests, 10);
+      if (response.success && response.users) {
+        setSuggestedUsers(response.users);
+        // Pre-populate followed users based on isFollowing flag
+        const alreadyFollowing = response.users
+          .filter((user: any) => user.isFollowing)
+          .map((user: any) => user.id);
+        setFollowedUsers(alreadyFollowing);
+      }
+    } catch (error: any) {
+      console.error('Error fetching suggested users:', error);
+      toast.error('Failed to load suggested users');
+    } finally {
+      setIsLoadingSuggestedUsers(false);
     }
   };
 
-  // Debounced username check
+  // Debounced username check - MUST be before early return
   useEffect(() => {
     if (username.length < 3) {
       setUsernameError('Username must be at least 3 characters');

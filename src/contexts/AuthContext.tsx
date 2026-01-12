@@ -39,22 +39,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state from localStorage on mount
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:41',message:'useEffect entry',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     let isMounted = true;
     let hasInitialized = false;
     
     const finishInitialization = () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:45',message:'finishInitialization called',data:{isMounted,hasInitialized},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       if (isMounted && !hasInitialized) {
         hasInitialized = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:48',message:'setIsInitializing(false) called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         setIsInitializing(false);
       }
     };
     
     const initializeAuth = async () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:52',message:'initializeAuth entry',data:{hasWindow:typeof window!=='undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       try {
         // Check if token exists in localStorage
         if (typeof window !== 'undefined') {
           // Check for Supabase email verification redirect in URL hash
           const hash = window.location.hash;
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:57',message:'Checking URL hash',data:{hasHash:!!hash,hashIncludesToken:hash?.includes('access_token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           if (hash && hash.includes('access_token')) {
             try {
               // Parse hash fragment: #access_token=...&expires_at=...&type=signup
@@ -65,6 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const type = hashParams.get('type'); // 'signup' for new users
               
               if (accessToken) {
+                // #region agent log
+                fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:67',message:'Email verification path - storing token',data:{hasAccessToken:!!accessToken,type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
                 // Store token
                 const tokenData = {
                   access_token: accessToken,
@@ -82,7 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 
                 // Fetch user data
                 try {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:85',message:'Fetching user after email verification',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                  // #endregion
                   const userResponse = await authApi.getCurrentUser();
+                  // #region agent log
+                  fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:86',message:'User response received',data:{success:userResponse.success,hasUser:!!userResponse.user,username:userResponse.user?.username},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                  // #endregion
                   if (userResponse.success && userResponse.user) {
                     const userData = {
                       email: userResponse.user.email || '',
@@ -94,6 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     };
                     
                     if (isMounted) {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:96',message:'Before state updates',data:{isMounted,hasInitialized},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                      // #endregion
                       setUserData(userData);
                       
                       // Cache user data
@@ -106,16 +133,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
                         userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
                       
+                      // #region agent log
+                      fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:109',message:'Onboarding decision',data:{isNewSignup,hasCompletedOnboarding,hasDefaultUsername,hasUsername:!!userResponse.user.username,willShowOnboarding:isNewSignup||(!hasCompletedOnboarding&&(hasDefaultUsername||!userResponse.user.username))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                      // #endregion
                       if (isNewSignup || (!hasCompletedOnboarding && (hasDefaultUsername || !userResponse.user.username))) {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:110',message:'setShowOnboarding(true) called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                        // #endregion
                         setShowOnboarding(true);
                       } else {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:112',message:'setIsAuthenticated(true) called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                        // #endregion
                         setIsAuthenticated(true);
                       }
                       finishInitialization();
+                      // #region agent log
+                      fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:114',message:'Early return after email verification',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                      // #endregion
                     }
                     return;
                   }
                 } catch (error: any) {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:118',message:'Error fetching user after email verification',data:{error:error?.message,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                  // #endregion
                   console.error('Error fetching user after email verification:', error);
                   toast.error('Failed to load user data. Please try logging in.');
                   finishInitialization();
@@ -123,6 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
               }
             } catch (error: any) {
+              // #region agent log
+              fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:121',message:'Error parsing email verification hash',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+              // #endregion
               console.error('Error parsing email verification hash:', error);
               // Continue to normal auth flow
             }
@@ -217,6 +262,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth();
 
     return () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/6ad6876e-0063-49c9-9841-eceac6501018',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:264',message:'useEffect cleanup',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       isMounted = false;
     };
   }, []);
