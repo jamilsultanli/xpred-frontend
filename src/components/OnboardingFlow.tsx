@@ -112,6 +112,14 @@ export function OnboardingFlow() {
     return () => clearTimeout(timeoutId);
   }, [username]);
 
+  const handleInterestToggle = (categoryId: string) => {
+    if (selectedInterests.includes(categoryId)) {
+      setSelectedInterests(selectedInterests.filter(id => id !== categoryId));
+    } else {
+      setSelectedInterests([...selectedInterests, categoryId]);
+    }
+  };
+
   const handleUsernameChange = (value: string) => {
     const sanitized = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
     setUsername(sanitized);
