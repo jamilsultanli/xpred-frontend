@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state from localStorage on mount
   useEffect(() => {
+    let isMounted = true;
     const initializeAuth = async () => {
       try {
         // Check if token exists in localStorage
@@ -95,13 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
                       userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
                     
-                    if (isNewSignup || (!hasCompletedOnboarding && (hasDefaultUsername || !userResponse.user.username))) {
-                      setShowOnboarding(true);
-                    } else {
-                      setIsAuthenticated(true);
-                    }
-                    
                     if (isMounted) {
+                      if (isNewSignup || (!hasCompletedOnboarding && (hasDefaultUsername || !userResponse.user.username))) {
+                        setShowOnboarding(true);
+                      } else {
+                        setIsAuthenticated(true);
+                      }
                       setIsInitializing(false);
                     }
                     return;
@@ -112,10 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   if (isMounted) {
                     setIsInitializing(false);
                   }
-                }
-              } else {
-                if (isMounted) {
-                  setIsInitializing(false);
                 }
               }
             } catch (error: any) {
@@ -203,6 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initializeAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = (data?: UserData) => {
