@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { authApi } from '../lib/api/auth';
 import { requestCache, CacheTime, cacheKeys } from '../lib/cache';
 import { apiClient } from '../lib/api/client';
+import { toast } from 'sonner';
 
 interface UserData {
   email: string;
@@ -42,6 +43,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // Check if token exists in localStorage
         if (typeof window !== 'undefined') {
+          // Check for Supabase email verification redirect in URL hash
+          const hash = window.location.hash;
+          if (hash && hash.includes('access_token')) {
+            try {
+              // Parse hash fragment: #access_token=...&expires_at=...&type=signup
+              const hashParams = new URLSearchParams(hash.substring(1)); // Remove #
+              const accessToken = hashParams.get('access_token');
+              const refreshToken = hashParams.get('refresh_token');
+              const expiresAt = hashParams.get('expires_at');
+              const type = hashParams.get('type'); // 'signup' for new users
+              
+              if (accessToken) {
+                // Store token
+                const tokenData = {
+                  access_token: accessToken,
+                  refresh_token: refreshToken,
+                  expires_at: expiresAt,
+                };
+                localStorage.setItem('auth_token', JSON.stringify(tokenData));
+                apiClient.setToken(accessToken);
+                
+                // Clear hash from URL
+                window.history.replaceState(null, '', window.location.pathname);
+                
+                // Show success notification
+                toast.success('Email verified successfully! Welcome to Xpred.');
+                
+                // Fetch user data
+                try {
+                  const userResponse = await authApi.getCurrentUser();
+                  if (userResponse.success && userResponse.user) {
+                    const userData = {
+                      email: userResponse.user.email || '',
+                      name: userResponse.user.full_name || userResponse.user.username || '',
+                      username: userResponse.user.username,
+                      avatar: userResponse.user.avatar_url,
+                      bio: userResponse.user.bio,
+                      created_at: userResponse.user.created_at,
+                    };
+                    
+                    setUserData(userData);
+                    
+                    // Cache user data
+                    requestCache.set(cacheKeys.user(), userResponse.user, CacheTime.LONG);
+                    localStorage.setItem('user_data_timestamp', Date.now().toString());
+                    
+                    // Show onboarding for new users (type=signup) or users without username
+                    const hasCompletedOnboarding = localStorage.getItem('onboarding_completed');
+                    const isNewSignup = type === 'signup';
+                    const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
+                      userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
+                    
+                    if (isNewSignup || (!hasCompletedOnboarding && (hasDefaultUsername || !userResponse.user.username))) {
+                      setShowOnboarding(true);
+                    } else {
+                      setIsAuthenticated(true);
+                    }
+                    
+                    setIsInitializing(false);
+                    return;
+                  }
+                } catch (error: any) {
+                  console.error('Error fetching user after email verification:', error);
+                  toast.error('Failed to load user data. Please try logging in.');
+                }
+              }
+            } catch (error: any) {
+              console.error('Error parsing email verification hash:', error);
+            }
+          }
+          
           const stored = localStorage.getItem('auth_token');
           if (stored) {
             // Check cache first (5 minute cache for user data)
