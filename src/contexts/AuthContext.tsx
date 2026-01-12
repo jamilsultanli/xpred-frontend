@@ -40,6 +40,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialize auth state from localStorage on mount
   useEffect(() => {
     let isMounted = true;
+    let hasInitialized = false;
+    
+    const finishInitialization = () => {
+      if (isMounted && !hasInitialized) {
+        hasInitialized = true;
+        setIsInitializing(false);
+      }
+    };
+    
     const initializeAuth = async () => {
       try {
         // Check if token exists in localStorage
@@ -84,34 +93,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                       created_at: userResponse.user.created_at,
                     };
                     
-                    setUserData(userData);
-                    
-                    // Cache user data
-                    requestCache.set(cacheKeys.user(), userResponse.user, CacheTime.LONG);
-                    localStorage.setItem('user_data_timestamp', Date.now().toString());
-                    
-                    // Show onboarding for new users (type=signup) or users without username
-                    const hasCompletedOnboarding = localStorage.getItem('onboarding_completed');
-                    const isNewSignup = type === 'signup';
-                    const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
-                      userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
-                    
                     if (isMounted) {
+                      setUserData(userData);
+                      
+                      // Cache user data
+                      requestCache.set(cacheKeys.user(), userResponse.user, CacheTime.LONG);
+                      localStorage.setItem('user_data_timestamp', Date.now().toString());
+                      
+                      // Show onboarding for new users (type=signup) or users without username
+                      const hasCompletedOnboarding = localStorage.getItem('onboarding_completed');
+                      const isNewSignup = type === 'signup';
+                      const hasDefaultUsername = userResponse.user.username && userResponse.user.email && 
+                        userResponse.user.username.toLowerCase() === userResponse.user.email.split('@')[0].toLowerCase();
+                      
                       if (isNewSignup || (!hasCompletedOnboarding && (hasDefaultUsername || !userResponse.user.username))) {
                         setShowOnboarding(true);
                       } else {
                         setIsAuthenticated(true);
                       }
-                      setIsInitializing(false);
+                      finishInitialization();
                     }
                     return;
                   }
                 } catch (error: any) {
                   console.error('Error fetching user after email verification:', error);
                   toast.error('Failed to load user data. Please try logging in.');
-                  if (isMounted) {
-                    setIsInitializing(false);
-                  }
+                  finishInitialization();
+                  return;
                 }
               }
             } catch (error: any) {
@@ -139,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   avatar: cachedUser.avatar_url,
                   bio: cachedUser.bio,
                 });
-                setIsInitializing(false);
+                finishInitialization();
               }
               return;
             }
@@ -178,10 +186,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   } else {
                     setIsAuthenticated(true);
                   }
-                  setIsInitializing(false);
+                  finishInitialization();
                 }
-              } else if (isMounted) {
-                setIsInitializing(false);
+              } else {
+                finishInitialization();
               }
             } catch (error: any) {
               // Token is invalid or expired, clear it silently
@@ -190,23 +198,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               localStorage.removeItem('user_data_timestamp');
               requestCache.clear(cacheKeys.user());
               apiClient.setToken(null);
-              if (isMounted) {
-                setIsInitializing(false);
-              }
+              finishInitialization();
             }
-          } else if (isMounted) {
+          } else {
             // No token found
-            setIsInitializing(false);
+            finishInitialization();
           }
-        } else if (isMounted) {
+        } else {
           // Not in browser environment
-          setIsInitializing(false);
+          finishInitialization();
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
-        if (isMounted) {
-          setIsInitializing(false);
-        }
+        finishInitialization();
       }
     };
 
