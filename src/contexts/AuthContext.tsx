@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi } from '../lib/api/auth';
 import { requestCache, CacheTime, cacheKeys } from '../lib/cache';
 import { apiClient } from '../lib/api/client';
