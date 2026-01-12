@@ -37,7 +37,7 @@ export function PlaceBetModal({ isOpen, onClose, question, prediction, predictio
   }, [isOpen, isAuthenticated, predictionId, activeTab]);
 
   useEffect(() => {
-    if (amount && parseFloat(amount) > 0) {
+    if (amount && parseFloat(amount) > 0 && multiplier > 0) {
       const amt = parseFloat(amount);
       const payout = amt * multiplier;
       const fee = payout * 0.05; // 5% platform fee
@@ -71,11 +71,21 @@ export function PlaceBetModal({ isOpen, onClose, question, prediction, predictio
       if (response.success && response.multipliers) {
         const currency = activeTab === 'xp' ? 'xp' : 'xc';
         const choice = prediction === 'yes' ? 'yes' : 'no';
-        const mult = response.multipliers[currency]?.[choice] || 1.5;
-        setMultiplier(mult);
+        const mult = response.multipliers[currency]?.[choice];
+        if (mult && mult > 0) {
+          setMultiplier(mult);
+        } else {
+          // Fallback to default multiplier if not available
+          setMultiplier(1.5);
+        }
+      } else {
+        // Fallback if API call fails
+        setMultiplier(1.5);
       }
     } catch (error) {
       console.error('Failed to load multipliers:', error);
+      // Fallback to default multiplier on error
+      setMultiplier(1.5);
     }
   };
 

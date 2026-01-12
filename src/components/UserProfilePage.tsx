@@ -493,18 +493,34 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
 
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4 mb-6">
-              <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                <div className="text-2xl font-bold text-blue-500">
-                  {user.balance_xp ? (user.balance_xp >= 1000000 ? `${(user.balance_xp / 1000000).toFixed(1)}M` : user.balance_xp >= 1000 ? `${(user.balance_xp / 1000).toFixed(0)}K` : user.balance_xp) : '0'}
-                </div>
-                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XP</div>
-              </div>
-              <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                <div className="text-2xl font-bold text-purple-500">
-                  {user.balance_xc ? user.balance_xc.toLocaleString() : '0'}
-                </div>
-                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XC</div>
-              </div>
+              {/* Only show balance if viewing own profile */}
+              {isAuthenticated && userData?.id === user?.id ? (
+                <>
+                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                    <div className="text-2xl font-bold text-blue-500">
+                      {user.balance_xp ? (user.balance_xp >= 1000000 ? `${(user.balance_xp / 1000000).toFixed(1)}M` : user.balance_xp >= 1000 ? `${(user.balance_xp / 1000).toFixed(0)}K` : user.balance_xp) : '0'}
+                    </div>
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XP</div>
+                  </div>
+                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                    <div className="text-2xl font-bold text-purple-500">
+                      {user.balance_xc ? user.balance_xc.toLocaleString() : '0'}
+                    </div>
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XC</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                    <div className="text-2xl font-bold text-blue-500">***</div>
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XP</div>
+                  </div>
+                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                    <div className="text-2xl font-bold text-purple-500">***</div>
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XC</div>
+                  </div>
+                </>
+              )}
               <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
                 <div className="text-2xl font-bold text-green-500">{user.predictions_count || 0}</div>
                 <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Predictions</div>
