@@ -28,13 +28,60 @@ export function PlaceBetModal({ isOpen, onClose, question, prediction, predictio
   const [potentialPayout, setPotentialPayout] = useState(0);
   const [platformFee, setPlatformFee] = useState(0);
   const [youReceive, setYouReceive] = useState(0);
+  // Pool data for dynamic multiplier calculation
+  const [poolData, setPoolData] = useState<{
+    total_pot_xp?: number;
+    yes_pool_xp?: number;
+    no_pool_xp?: number;
+    total_pot_xc?: number;
+    yes_pool_xc?: number;
+    no_pool_xc?: number;
+  } | null>(null);
 
   useEffect(() => {
     if (isOpen && isAuthenticated && predictionId) {
       loadBalance();
-      loadMultipliers();
+      loadPoolData();
     }
   }, [isOpen, isAuthenticated, predictionId, activeTab]);
+
+  // Calculate multiplier dynamically based on bet amount
+  useEffect(() => {
+    if (!poolData) return;
+
+    const betAmount = amount ? parseFloat(amount) : 0;
+    const currency = activeTab === 'xp' ? 'xp' : 'xc';
+    const choice = prediction === 'yes' ? 'yes' : 'no';
+
+    // Get current pools
+    const totalPot = currency === 'xp' 
+      ? (poolData.total_pot_xp || 0) 
+      : (poolData.total_pot_xc || 0);
+    const winningPool = choice === 'yes'
+      ? (currency === 'xp' ? (poolData.yes_pool_xp || 0) : (poolData.yes_pool_xc || 0))
+      : (currency === 'xp' ? (poolData.no_pool_xp || 0) : (poolData.no_pool_xc || 0));
+
+    // Calculate multiplier: (Total Pot + Bet Amount) / (Winning Pool + Bet Amount)
+    let calculatedMultiplier = 1.5; // Default fallback
+    if (betAmount > 0) {
+      const newTotalPot = totalPot + betAmount;
+      const newWinningPool = winningPool + betAmount;
+      if (newWinningPool > 0) {
+        calculatedMultiplier = newTotalPot / newWinningPool;
+      } else {
+        calculatedMultiplier = newTotalPot + 1; // If no bets on this side yet
+      }
+    } else {
+      // Show current multiplier when no amount entered
+      if (winningPool > 0) {
+        calculatedMultiplier = totalPot / winningPool;
+      } else {
+        calculatedMultiplier = totalPot + 1;
+      }
+    }
+
+    setMultiplier(calculatedMultiplier);
+  }, [amount, poolData, activeTab, prediction]);
 
   useEffect(() => {
     if (amount && parseFloat(amount) > 0 && multiplier > 0) {
@@ -64,28 +111,44 @@ export function PlaceBetModal({ isOpen, onClose, question, prediction, predictio
     }
   };
 
-  const loadMultipliers = async () => {
+  const loadPoolData = async () => {
     if (!predictionId) return;
     try {
-      const response = await betsApi.getMultipliers(predictionId);
-      if (response.success && response.multipliers) {
-        const currency = activeTab === 'xp' ? 'xp' : 'xc';
-        const choice = prediction === 'yes' ? 'yes' : 'no';
-        const mult = response.multipliers[currency]?.[choice];
-        if (mult && mult > 0) {
-          setMultiplier(mult);
-        } else {
-          // Fallback to default multiplier if not available
-          setMultiplier(1.5);
-        }
+      // Fetch prediction with pool data
+      const response = await apiClient.get(`/predictions/${predictionId}`);
+      if (response.success && response.prediction) {
+        const pred = response.prediction;
+        setPoolData({
+          total_pot_xp: pred.total_pot_xp || 0,
+          yes_pool_xp: pred.yes_pool_xp || 0,
+          no_pool_xp: pred.no_pool_xp || 0,
+          total_pot_xc: pred.total_pot_xc || 0,
+          yes_pool_xc: pred.yes_pool_xc || 0,
+          no_pool_xc: pred.no_pool_xc || 0,
+        });
       } else {
-        // Fallback if API call fails
-        setMultiplier(1.5);
+        console.error('Failed to load pool data: Invalid response');
+        // Fallback to empty pools
+        setPoolData({
+          total_pot_xp: 0,
+          yes_pool_xp: 0,
+          no_pool_xp: 0,
+          total_pot_xc: 0,
+          yes_pool_xc: 0,
+          no_pool_xc: 0,
+        });
       }
     } catch (error) {
-      console.error('Failed to load multipliers:', error);
-      // Fallback to default multiplier on error
-      setMultiplier(1.5);
+      console.error('Failed to load pool data:', error);
+      // Fallback to empty pools
+      setPoolData({
+        total_pot_xp: 0,
+        yes_pool_xp: 0,
+        no_pool_xp: 0,
+        total_pot_xc: 0,
+        yes_pool_xc: 0,
+        no_pool_xc: 0,
+      });
     }
   };
 
