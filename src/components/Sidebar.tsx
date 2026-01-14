@@ -1,8 +1,9 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Compass, Trophy, Bell, Bookmark, Users, User, PlusCircle, LogOut, Mail, Settings, Wallet, Store } from 'lucide-react';
+import { Home, Compass, Trophy, Bell, Bookmark, Users, User, PlusCircle, LogOut, Mail, Settings, Wallet, Store, TrendingUp } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadCounts, formatCount } from '../hooks/useUnreadCounts';
+import { ActiveBets } from './ActiveBets';
 
 interface SidebarProps {
   onCreateClick: () => void;
@@ -16,6 +17,7 @@ const menuItems = [
   { icon: Bell, label: 'Notifications', path: '/notifications' },
   { icon: Mail, label: 'Messages', path: '/messages' },
   { icon: Bookmark, label: 'Bookmarks', path: '/bookmarks' },
+  { icon: TrendingUp, label: 'Active Predictions', path: '/active-predictions' },
   { icon: Wallet, label: 'Wallet', path: '/wallet' },
   { icon: Store, label: 'XP Market', path: '/xp-market' },
   { icon: Settings, label: 'Settings', path: '/settings' },
@@ -54,7 +56,7 @@ export function Sidebar({ onCreateClick }: SidebarProps) {
     <aside className="w-[275px] px-4 py-2 sticky top-[] h-[] hidden lg:flex flex-col">
       <nav className="space-y-2 flex-1">
         {menuItems.map((item) => {
-          const requiresAuth = ['/notifications', '/bookmarks', '/settings'].includes(item.path);
+          const requiresAuth = ['/notifications', '/bookmarks', '/settings', '/active-predictions', '/messages'].includes(item.path);
           const active = isActive(item.path);
           
           if (requiresAuth && !isAuthenticated) {
@@ -92,6 +94,13 @@ export function Sidebar({ onCreateClick }: SidebarProps) {
             </Link>
           );
         })}
+
+        {/* Sidebar section: Active Predictions (moved from Home) */}
+        {isAuthenticated && (
+          <div className={`mt-3 rounded-2xl border ${isDark ? 'border-gray-800 bg-[#0b0d10]' : 'border-gray-200 bg-white'} overflow-hidden`}>
+            <ActiveBets variant="sidebar" />
+          </div>
+        )}
         
         <button 
           onClick={() => {

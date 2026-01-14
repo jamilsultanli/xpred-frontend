@@ -29,8 +29,7 @@ import { AllActivePredictionsPage } from './components/AllActivePredictionsPage'
 import { LoginModal } from './components/LoginModal';
 import { OnboardingFlow } from './components/OnboardingFlow';
 import { CreatePredictionModal } from './components/CreatePredictionModal';
-import { UserStats } from './components/UserStats';
-import { ActiveBets } from './components/ActiveBets';
+import { useAuth } from './contexts/AuthContext';
 import { SEO } from './components/SEO';
 import { HelpPage } from './components/HelpPage';
 import { TermsPage } from './components/TermsPage';
@@ -44,7 +43,7 @@ import { SweepstakePolicyPage } from './components/SweepstakePolicyPage';
 import { NotFoundPage } from './components/NotFoundPage';
 import { ResolutionCenter } from './components/ResolutionCenter';
 import { ResolutionNoticeBar } from './components/ResolutionNoticeBar';
-import { useAuth } from './contexts/AuthContext';
+import { SharePredictionComposer } from './components/SharePredictionComposer';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import AdminUsers from './components/admin/AdminUsers';
@@ -127,8 +126,8 @@ function ResolutionCenterWrapper() {
   return <ResolutionCenter onBack={() => navigate('/')} />;
 }
 
-function HomePage({ newPrediction }: { newPrediction?: any }) {
-  const { isAuthenticated } = useAuth();
+function HomePage({ newPrediction, onCreateClick }: { newPrediction?: any; onCreateClick: () => void }) {
+  const { isAuthenticated, setShowLoginModal, userData } = useAuth();
   const navigate = useNavigate();
 
   const navigateToProfile = (username: string) => {
@@ -137,8 +136,19 @@ function HomePage({ newPrediction }: { newPrediction?: any }) {
 
   return (
     <>
-      {isAuthenticated && <UserStats />}
-      {isAuthenticated && <ActiveBets />}
+      <SharePredictionComposer
+        isAuthenticated={isAuthenticated}
+        avatarUrl={userData?.avatar}
+        displayName={userData?.name}
+        username={userData?.username}
+        onCompose={() => {
+          if (!isAuthenticated) {
+            setShowLoginModal(true);
+            return;
+          }
+          onCreateClick();
+        }}
+      />
       <PredictionFeed 
         onProfileClick={navigateToProfile} 
         newPrediction={newPrediction}
@@ -254,7 +264,7 @@ function AppContent() {
       
       {/* Mobile Header */}
       <div className="lg:hidden">
-        <MobileHeader />
+        <MobileHeader onCreateClick={() => setShowCreateModal(true)} />
       </div>
       
       {/* Resolution Notice Bar - only show on feed pages */}
@@ -269,7 +279,7 @@ function AppContent() {
         {/* Main Content - Scrollable */}
         <main className={`flex-1 lg:border-x overflow-y-auto ${theme === 'light' ? 'lg:border-gray-200' : 'lg:border-gray-800'} pb-16 lg:pb-0`}>
           <Routes>
-            <Route path="/" element={<HomePage newPrediction={newPrediction} />} />
+            <Route path="/" element={<HomePage newPrediction={newPrediction} onCreateClick={() => setShowCreateModal(true)} />} />
             <Route path="/explore" element={<ExplorePageWrapper />} />
             <Route path="/leaderboard" element={<LeaderboardPageWrapper />} />
             <Route path="/messages" element={<MessagesPage />} />

@@ -1,14 +1,21 @@
+import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Settings, LogIn, TrendingUp, Users, ChevronLeft, Trophy } from 'lucide-react';
+import { Search, Settings, LogIn, TrendingUp, Users, ChevronLeft, Trophy, Menu } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { MobileSidebarDrawer } from './MobileSidebarDrawer';
 
-export function MobileHeader() {
+interface MobileHeaderProps {
+  onCreateClick: () => void;
+}
+
+export function MobileHeader({ onCreateClick }: MobileHeaderProps) {
   const { theme } = useTheme();
   const { isAuthenticated, setShowLoginModal } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const isDark = theme === 'dark';
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const getPageTitle = () => {
     const path = location.pathname;
@@ -48,9 +55,18 @@ export function MobileHeader() {
                 <ChevronLeft className="w-5 h-5" />
               </button>
             ) : (
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <span className="text-white text-lg font-bold">X</span>
-              </div>
+              <>
+                <button
+                  onClick={() => setIsMenuOpen(true)}
+                  className={`p-2 rounded-full transition-colors active:scale-90 ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-100'}`}
+                  aria-label="Open menu"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <span className="text-white text-lg font-bold">X</span>
+                </div>
+              </>
             )}
             <div className="flex items-center gap-2">
               {PageIcon && <PageIcon className="w-5 h-5" />}
@@ -92,6 +108,15 @@ export function MobileHeader() {
           </div>
         )}
       </div>
+
+      <MobileSidebarDrawer
+        open={isMenuOpen}
+        onOpenChange={setIsMenuOpen}
+        onCreateClick={() => {
+          setIsMenuOpen(false);
+          onCreateClick();
+        }}
+      />
     </header>
   );
 }

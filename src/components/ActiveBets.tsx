@@ -5,7 +5,11 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { betsApi } from '../lib/api/bets';
 
-export function ActiveBets() {
+interface ActiveBetsProps {
+  variant?: 'home' | 'sidebar';
+}
+
+export function ActiveBets({ variant = 'home' }: ActiveBetsProps) {
   const { theme } = useTheme();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -38,11 +42,11 @@ export function ActiveBets() {
   if (!isAuthenticated) return null;
 
   return (
-    <div className={`border-b ${isDark ? 'border-gray-800' : 'border-gray-200'} p-4`}>
+    <div className={`${variant === 'home' ? `border-b ${isDark ? 'border-gray-800' : 'border-gray-200'} p-4` : 'p-3'}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-blue-500" />
-          Your Active Predictions
+          {variant === 'home' ? 'Your Active Predictions' : 'Active Predictions'}
         </h2>
         {activeBets.length > 2 && (
           <button
