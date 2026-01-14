@@ -1,3 +1,4 @@
+import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Compass, Trophy, Bell, Bookmark, Users, User, PlusCircle, LogOut, Mail, Settings, Wallet, Store, TrendingUp } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
