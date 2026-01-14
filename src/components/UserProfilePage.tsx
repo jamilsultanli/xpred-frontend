@@ -76,6 +76,12 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFollow, setIsLoadingFollow] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [ownerStats, setOwnerStats] = useState<{
+    totalXP: number;
+    totalXC: number;
+    totalPredictions: number;
+    winRate: number;
+  } | null>(null);
 
   // Handle profile click navigation
   const onProfileClick = (clickedUsername: string) => {
@@ -90,9 +96,36 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
       setIsFollowing(false);
       setUser(null);
       setPredictions([]);
+      setOwnerStats(null);
       fetchUserData();
     }
   }, [username]);
+
+  const isOwner =
+    isAuthenticated &&
+    !!userData?.id &&
+    !!user?.id &&
+    userData.id === user.id;
+
+  // Load private stats only for owner (and only when logged in)
+  useEffect(() => {
+    if (!isOwner) return;
+    (async () => {
+      try {
+        const resp = await usersApi.getStats(); // /users/me/stats
+        if (resp.success && resp.stats) {
+          setOwnerStats({
+            totalXP: resp.stats.totalXP || 0,
+            totalXC: resp.stats.totalXC || 0,
+            totalPredictions: resp.stats.totalPredictions || 0,
+            winRate: resp.stats.winRate || 0,
+          });
+        }
+      } catch {
+        // silent
+      }
+    })();
+  }, [isOwner]);
 
   // Fetch follow status after user data is loaded
   useEffect(() => {
@@ -364,7 +397,7 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
                 <div className={`w-32 h-10 rounded-full animate-pulse ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
                 <div className={`w-28 h-10 rounded-full animate-pulse ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}></div>
               </div>
-            ) : userData?.username === username ? (
+            ) : isOwner ? (
               // Own profile - show Edit Profile button
               <button
                 onClick={() => setShowEditProfile(true)}
@@ -481,62 +514,57 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
               )}
             </div>
 
-        <div className={`flex gap-6 mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          <Link 
-            to={`/user/${user.username}/followers`}
-            className="hover:underline flex items-center gap-1"
-          >
-            <span className="font-bold text-lg">{user.followers_count || 0}</span>
-            <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Followers</span>
-          </Link>
-          <Link 
-            to={`/user/${user.username}/following`}
-            className="hover:underline flex items-center gap-1"
-          >
-            <span className="font-bold text-lg">{user.following_count || 0}</span>
-            <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Following</span>
-          </Link>
-        </div>
+            {/* Followers/Following (private: only owner + logged in) */}
+            {isOwner && (
+              <div className={`flex gap-6 mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                <Link 
+                  to={`/user/${user.username}/followers`}
+                  className="hover:underline flex items-center gap-1"
+                >
+                  <span className="font-bold text-lg">{user.followers_count || 0}</span>
+                  <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Followers</span>
+                </Link>
+                <Link 
+                  to={`/user/${user.username}/following`}
+                  className="hover:underline flex items-center gap-1"
+                >
+                  <span className="font-bold text-lg">{user.following_count || 0}</span>
+                  <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Following</span>
+                </Link>
+              </div>
+            )}
 
-            {/* Stats */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
-              {/* Only show balance if viewing own profile */}
-              {isAuthenticated && userData?.id === user?.id ? (
-                <>
-                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                    <div className="text-2xl font-bold text-blue-500">
-                      {user.balance_xp ? (user.balance_xp >= 1000000 ? `${(user.balance_xp / 1000000).toFixed(1)}M` : user.balance_xp >= 1000 ? `${(user.balance_xp / 1000).toFixed(0)}K` : user.balance_xp) : '0'}
-                    </div>
-                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XP</div>
+            {/* Private Stats: only owner + logged-in */}
+            {isOwner && (
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                  <div className="text-2xl font-bold text-blue-500">
+                    {ownerStats?.totalXP !== undefined
+                      ? ownerStats.totalXP >= 1000000
+                        ? `${(ownerStats.totalXP / 1000000).toFixed(1)}M`
+                        : ownerStats.totalXP >= 1000
+                        ? `${(ownerStats.totalXP / 1000).toFixed(0)}K`
+                        : ownerStats.totalXP.toLocaleString()
+                      : '0'}
                   </div>
-                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                    <div className="text-2xl font-bold text-purple-500">
-                      {user.balance_xc ? user.balance_xc.toLocaleString() : '0'}
-                    </div>
-                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XC</div>
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XP</div>
+                </div>
+                <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                  <div className="text-2xl font-bold text-purple-500">
+                    {ownerStats?.totalXC !== undefined ? ownerStats.totalXC.toFixed(2) : '0.00'}
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                    <div className="text-2xl font-bold text-blue-500">***</div>
-                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XP</div>
-                  </div>
-                  <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                    <div className="text-2xl font-bold text-purple-500">***</div>
-                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XC</div>
-                  </div>
-                </>
-              )}
-              <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                <div className="text-2xl font-bold text-green-500">{user.predictions_count || 0}</div>
-                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Predictions</div>
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XC</div>
+                </div>
+                <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                  <div className="text-2xl font-bold text-green-500">{ownerStats?.totalPredictions ?? 0}</div>
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Predictions</div>
+                </div>
+                <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
+                  <div className="text-2xl font-bold text-yellow-500">{(ownerStats?.winRate ?? 0).toFixed(1)}%</div>
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Win Rate</div>
+                </div>
               </div>
-              <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                <div className="text-2xl font-bold text-yellow-500">{user.win_rate ? Math.round(user.win_rate * 100) : 0}%</div>
-                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Win Rate</div>
-              </div>
-            </div>
+            )}
           </>
         ) : (
           <div className={`p-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
