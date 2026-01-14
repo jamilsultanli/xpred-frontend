@@ -93,6 +93,20 @@ export const messagesApi = {
     return apiClient.post(`/messages/${conversationId}/typing`, { isTyping });
   },
 
+  // Get typing status (polling)
+  getTypingStatus: async (conversationId: string): Promise<{
+    success: boolean;
+    isTyping: boolean;
+    users: Array<{
+      id: string;
+      username: string;
+      full_name?: string;
+      avatar_url?: string;
+    }>;
+  }> => {
+    return apiClient.get(`/messages/${conversationId}/typing`, { enabled: false });
+  },
+
   // Get unread count
   getUnreadCount: async (): Promise<{
     success: boolean;

@@ -4,7 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { messagesApi, Conversation, Message } from '../lib/api/messages';
 import { usersApi } from '../lib/api/users';
-import { Send, Phone, Video, Info, ArrowLeft, Smile, Paperclip, Mic } from 'lucide-react';
+import { Send, Phone, Video, Info, ArrowLeft, Search, Smile, Paperclip, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function MessagesPage() {
@@ -19,10 +19,14 @@ export function MessagesPage() {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [search, setSearch] = useState('');
+  const [otherTyping, setOtherTyping] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const typingPollRef = useRef<NodeJS.Timeout | null>(null);
+  const typingDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageCountRef = useRef<number>(0);
 
   // Optimized polling - only when conversation is open
@@ -36,9 +40,21 @@ export function MessagesPage() {
         loadMessagesQuiet();
       }, 2000);
 
+      // Poll typing every 900ms
+      typingPollRef.current = setInterval(() => {
+        loadTypingQuiet();
+      }, 900);
+
       return () => {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
+        }
+        if (typingPollRef.current) {
+          clearInterval(typingPollRef.current);
+        }
+        // Ensure we stop typing when leaving conversation
+        if (selectedConversation?.id) {
+          messagesApi.updateTypingStatus(selectedConversation.id, false).catch(() => {});
         }
       };
     }
@@ -142,12 +158,44 @@ export function MessagesPage() {
     }
   };
 
+  const loadTypingQuiet = async () => {
+    if (!selectedConversation?.id) return;
+    try {
+      const r = await messagesApi.getTypingStatus(selectedConversation.id);
+      if (r.success) {
+        setOtherTyping(!!r.isTyping);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const emitTyping = (isTyping: boolean) => {
+    if (!selectedConversation?.id) return;
+    messagesApi.updateTypingStatus(selectedConversation.id, isTyping).catch(() => {});
+  };
+
+  const onInputChange = (v: string) => {
+    setNewMessage(v);
+    if (!selectedConversation?.id) return;
+
+    // Start typing immediately
+    emitTyping(true);
+
+    // Debounce stop typing
+    if (typingDebounceRef.current) clearTimeout(typingDebounceRef.current);
+    typingDebounceRef.current = setTimeout(() => {
+      emitTyping(false);
+    }, 1200);
+  };
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || isSending) return;
     
     setIsSending(true);
     const messageContent = newMessage.trim();
     setNewMessage('');
+    emitTyping(false);
     
     // Optimistic update
     const tempMessage: Message = {
@@ -245,38 +293,48 @@ export function MessagesPage() {
     );
   }
 
+  const filteredConversations = conversations.filter((c) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      (c.participant.full_name || '').toLowerCase().includes(q) ||
+      (c.participant.username || '').toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="h-screen flex bg-black">
-      {/* Left Sidebar - Exact from screenshot */}
-      <div 
-        className={`w-full md:w-[410px] flex flex-col bg-black border-r border-gray-800 ${selectedConversation ? 'hidden md:flex' : 'flex'}`}
-      >
-        {/* Header */}
+      {/* Left Sidebar - Messenger-like */}
+      <div className={`w-full md:w-[380px] flex flex-col bg-black border-r border-gray-800 ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
         <div className="px-4 py-4 border-b border-gray-800">
-          <h1 className="text-2xl font-bold text-white">
-            {userData?.username || 'Messages'}
-          </h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-white">Messages</h1>
+          </div>
+          <div className="mt-3 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search Messenger"
+              className="w-full pl-10 pr-4 py-2.5 rounded-full bg-gray-900 text-white placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-600/40"
+            />
+          </div>
         </div>
-        
-        {/* Conversations */}
+
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex justify-center items-center h-64">
               <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
-          ) : conversations.length === 0 ? (
+          ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full px-6 py-12">
               <Send className="w-16 h-16 mb-4 text-gray-600" />
-              <p className="text-lg font-semibold mb-2 text-white">
-                No messages yet
-              </p>
-              <p className="text-sm text-center text-gray-500">
-                Start a conversation
-              </p>
+              <p className="text-lg font-semibold mb-2 text-white">No conversations</p>
+              <p className="text-sm text-center text-gray-500">Start a conversation from a profile</p>
             </div>
           ) : (
             <div>
-              {conversations.map((conv) => (
+              {filteredConversations.map((conv) => (
                 <button
                   key={conv.id}
                   onClick={() => {
@@ -284,14 +342,12 @@ export function MessagesPage() {
                     setTimeout(() => inputRef.current?.focus(), 100);
                   }}
                   className={`w-full px-4 py-3 flex items-center gap-3 transition-colors ${
-                    selectedConversation?.id === conv.id
-                      ? 'bg-gray-900' 
-                      : 'hover:bg-gray-900/50'
+                    selectedConversation?.id === conv.id ? 'bg-gray-900' : 'hover:bg-gray-900/50'
                   }`}
                 >
                   <div className="relative flex-shrink-0">
                     <div
-                      className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-base font-semibold"
+                      className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-white text-base font-semibold"
                       style={{
                         backgroundImage: conv.participant.avatar_url
                           ? `url(${conv.participant.avatar_url})`
@@ -331,8 +387,8 @@ export function MessagesPage() {
       {/* Right Chat Area - Exact from screenshot */}
       {selectedConversation ? (
         <div className="flex-1 flex flex-col bg-black">
-          {/* Chat Header - Exact from screenshot */}
-          <div className="px-6 py-3 flex items-center gap-4 bg-black border-b border-gray-800">
+          {/* Chat Header - Messenger-like */}
+          <div className="px-4 py-3 flex items-center gap-3 bg-black border-b border-gray-800">
             <button 
               onClick={() => setSelectedConversation(null)} 
               className="md:hidden p-2 rounded-full hover:bg-gray-800"
@@ -340,7 +396,7 @@ export function MessagesPage() {
               <ArrowLeft className="w-5 h-5 text-white" />
             </button>
             <div
-              className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-semibold cursor-pointer"
+              className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-sm font-semibold cursor-pointer"
               style={{
                 backgroundImage: selectedConversation.participant.avatar_url
                   ? `url(${selectedConversation.participant.avatar_url})`
@@ -354,9 +410,7 @@ export function MessagesPage() {
               <h2 className="font-semibold text-white text-base truncate">
                 {selectedConversation.participant.full_name || selectedConversation.participant.username}
               </h2>
-              <p className="text-xs text-gray-500">
-                @{selectedConversation.participant.username}
-              </p>
+              <p className="text-xs text-gray-500">{otherTyping ? 'Typing…' : `@${selectedConversation.participant.username}`}</p>
             </div>
             <div className="flex items-center gap-2">
               <button className="p-2 rounded-full hover:bg-gray-800">
@@ -371,8 +425,8 @@ export function MessagesPage() {
             </div>
           </div>
 
-          {/* Messages Area - Exact from screenshot */}
-          <div className="flex-1 overflow-y-auto px-6 py-4 bg-black">
+          {/* Messages Area - Messenger-like bubbles */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 bg-black">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="w-16 h-16 mb-4 rounded-full bg-gray-900 flex items-center justify-center">
@@ -386,16 +440,19 @@ export function MessagesPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {messages.map((message, index) => {
                   const isOwn = message.sender_id === userData?.id;
-                  const showAvatar = !isOwn && (index === 0 || messages[index - 1]?.sender_id !== message.sender_id);
-                  const showName = !isOwn && (index === 0 || messages[index - 1]?.sender_id !== message.sender_id);
+                  const prevSender = messages[index - 1]?.sender_id;
+                  const nextSender = messages[index + 1]?.sender_id;
+                  const isFirstInGroup = prevSender !== message.sender_id;
+                  const isLastInGroup = nextSender !== message.sender_id;
                   
                   return (
-                    <div key={message.id} className={`flex gap-2 items-end ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div key={message.id} className={`flex items-end ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex items-end gap-2 max-w-[75%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
                       {!isOwn && (
-                        <div className={`w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}
+                        <div className={`w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 ${isLastInGroup ? 'opacity-100' : 'opacity-0'}`}
                           style={{
                             backgroundImage: selectedConversation.participant.avatar_url
                               ? `url(${selectedConversation.participant.avatar_url})`
@@ -406,34 +463,48 @@ export function MessagesPage() {
                           {!selectedConversation.participant.avatar_url && selectedConversation.participant.full_name?.[0]?.toUpperCase()}
                         </div>
                       )}
-                      <div className={`flex flex-col max-w-[60%] ${isOwn ? 'items-end' : 'items-start'}`}>
-                        {showName && !isOwn && (
-                          <span className="text-xs font-medium mb-1 text-gray-400">
-                            {selectedConversation.participant.username}
+                      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+                        {!isOwn && isFirstInGroup && (
+                          <span className="text-[11px] text-gray-400 mb-1 ml-1">
+                            {selectedConversation.participant.full_name || selectedConversation.participant.username}
                           </span>
                         )}
-                        <div className={`px-4 py-2.5 rounded-2xl ${
-                          isOwn
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-800 text-white'
-                        }`}>
+                        <div className={`px-3 py-2 rounded-2xl ${
+                          isOwn ? 'bg-blue-600 text-white' : 'bg-gray-800 text-white'
+                        } ${isOwn ? 'rounded-br-md' : 'rounded-bl-md'}`}>
                           <p className="text-[15px] leading-snug break-words">
                             {message.content}
                           </p>
                         </div>
-                        <span className="text-[11px] text-gray-500 mt-1">
-                          {formatMessageTime(message.created_at)}
-                        </span>
+                        {isLastInGroup && (
+                          <span className="text-[11px] text-gray-500 mt-1">
+                            {isOwn ? 'You • ' : ''}{formatMessageTime(message.created_at)}
+                          </span>
+                        )}
+                      </div>
                       </div>
                     </div>
                   );
                 })}
+
+                {otherTyping && (
+                  <div className="flex items-end gap-2">
+                    <div className="w-8 h-8 rounded-full bg-gray-700 opacity-0" />
+                    <div className="px-3 py-2 rounded-2xl bg-gray-800 text-white">
+                      <div className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
             )}
           </div>
 
-          {/* Input Area - Exact from screenshot */}
+          {/* Input Area - Messenger-like */}
           <div className="px-4 py-3 bg-black border-t border-gray-800">
             <div className="flex items-center gap-2 bg-gray-900 rounded-full px-4 py-2.5">
               <button className="p-1 hover:bg-gray-800 rounded-full">
@@ -443,7 +514,7 @@ export function MessagesPage() {
                 ref={inputRef}
                 type="text"
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={(e) => onInputChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
