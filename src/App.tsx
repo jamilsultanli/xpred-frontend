@@ -136,19 +136,15 @@ function HomePage({ newPrediction, onCreateClick }: { newPrediction?: any; onCre
 
   return (
     <>
-      <SharePredictionComposer
-        isAuthenticated={isAuthenticated}
-        avatarUrl={userData?.avatar}
-        displayName={userData?.name}
-        username={userData?.username}
-        onCompose={() => {
-          if (!isAuthenticated) {
-            setShowLoginModal(true);
-            return;
-          }
-          onCreateClick();
-        }}
-      />
+      {isAuthenticated && (
+        <SharePredictionComposer
+          isAuthenticated={isAuthenticated}
+          avatarUrl={userData?.avatar}
+          displayName={userData?.name}
+          username={userData?.username}
+          onCompose={onCreateClick}
+        />
+      )}
       <PredictionFeed 
         onProfileClick={navigateToProfile} 
         newPrediction={newPrediction}

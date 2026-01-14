@@ -43,9 +43,6 @@ export function SharePredictionComposer({
               ? `Share a prediction${displayName || username ? `, ${displayName || username}` : ''}…`
               : 'Sign in to share a prediction…'}
           </div>
-          <div className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-            Like Twitter/Meta: tap to open the composer
-          </div>
         </button>
 
         <button
