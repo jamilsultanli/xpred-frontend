@@ -20,6 +20,7 @@ interface AuthContextType {
   showLoginModal: boolean;
   showOnboarding: boolean;
   userData: UserData | null;
+  token: string | null;
   setShowLoginModal: (show: boolean) => void;
   setShowOnboarding: (show: boolean) => void;
   login: (data?: UserData) => void;
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
   // Initialize auth state from localStorage on mount
@@ -130,6 +132,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           const stored = localStorage.getItem('auth_token');
           if (stored) {
+            try {
+              const tokenData = JSON.parse(stored);
+              const accessToken = tokenData.access_token || tokenData;
+              apiClient.setToken(accessToken);
+              setToken(accessToken);
+            } catch (e) {
+              // If parsing fails, assume it's a plain string token
+              apiClient.setToken(stored);
+              setToken(stored);
+            }
+
             // Check cache first (5 minute cache for user data)
             const cachedUser = requestCache.get<any>(cacheKeys.user());
             const cachedTimestamp = localStorage.getItem('user_data_timestamp');
@@ -247,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setIsAuthenticated(false);
     setUserData(null);
+    setToken(null);
     // Clear auth token and cache
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
@@ -277,6 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       showLoginModal, 
       showOnboarding,
       userData,
+      token,
       setShowLoginModal, 
       setShowOnboarding,
       login, 

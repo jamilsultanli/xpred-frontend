@@ -4,13 +4,13 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { messagesApi, Conversation, Message } from '../lib/api/messages';
 import { usersApi } from '../lib/api/users';
-import { Send, Smile, ArrowLeft, Loader2, Search, MoreVertical, Check, CheckCheck, Paperclip, Mic, Image as ImageIcon } from 'lucide-react';
-import EmojiPicker from 'emoji-picker-react';
+import { Send, ArrowLeft, Loader2, Search, MoreVertical, Check, CheckCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import io, { Socket } from 'socket.io-client';
 
 export function MessagesPage() {
   const { theme } = useTheme();
-  const { isAuthenticated, userData } = useAuth();
+  const { isAuthenticated, userData, token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const isDark = theme === 'dark';
   
@@ -21,11 +21,83 @@ export function MessagesPage() {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUser, setTypingUser] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      const socket = io('http://localhost:3001', {
+        auth: { token },
+        transports: ['websocket', 'polling'],
+      });
+
+      socket.on('connect', () => {
+        console.log('✅ Socket connected');
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('❌ Socket connection error:', error);
+      });
+
+      // Listen for new messages
+      socket.on('new_message', (message: Message) => {
+        console.log('📨 New message received:', message);
+        setMessages((prev) => [...prev, message]);
+        loadConversations(); // Refresh conversations list
+        scrollToBottom();
+      });
+
+      // Listen for typing status
+      socket.on('user_typing', (data: { userId: string; username: string; conversationId: string }) => {
+        if (selectedConversation?.id === data.conversationId) {
+          setTypingUser(data.username);
+          setIsTyping(true);
+        }
+      });
+
+      socket.on('user_stopped_typing', (data: { userId: string; conversationId: string }) => {
+        if (selectedConversation?.id === data.conversationId) {
+          setIsTyping(false);
+          setTypingUser(null);
+        }
+      });
+
+      // Listen for message read receipts
+      socket.on('messages_read', (data: { conversationId: string; messageIds: string[]; readBy: string }) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            data.messageIds.includes(msg.id) ? { ...msg, is_read: true } : msg
+          )
+        );
+      });
+
+      socketRef.current = socket;
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [isAuthenticated, token]);
+
+  // Join conversation room when selected
+  useEffect(() => {
+    if (socketRef.current && selectedConversation?.id) {
+      socketRef.current.emit('join_conversation', selectedConversation.id);
+      
+      return () => {
+        if (socketRef.current && selectedConversation?.id) {
+          socketRef.current.emit('leave_conversation', selectedConversation.id);
+        }
+      };
+    }
+  }, [selectedConversation?.id]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -52,18 +124,13 @@ export function MessagesPage() {
 
   const handleOpenConversationWithUser = async (userId: string) => {
     try {
-      console.log('🔍 Opening conversation with user:', userId);
-      
       const existingConv = conversations.find(conv => conv.participant.id === userId);
 
       if (existingConv) {
-        console.log('✅ Found existing conversation');
         setSelectedConversation(existingConv);
         setTimeout(() => inputRef.current?.focus(), 100);
       } else {
-        console.log('📡 Fetching user profile...');
         const userResponse = await usersApi.getById(userId);
-        console.log('📦 User response:', userResponse);
         
         if (userResponse.success && userResponse.user) {
           const tempConversation: Conversation = {
@@ -81,17 +148,14 @@ export function MessagesPage() {
             createdAt: new Date().toISOString(),
           };
           
-          console.log('✅ Created temp conversation:', tempConversation);
           setSelectedConversation(tempConversation);
           setMessages([]);
           setTimeout(() => inputRef.current?.focus(), 100);
         } else {
-          console.error('❌ Failed to get user:', userResponse);
           toast.error('User not found');
         }
       }
     } catch (error: any) {
-      console.error('❌ Failed to open conversation:', error);
       toast.error(error.message || 'Failed to open conversation');
     }
   };
@@ -123,6 +187,29 @@ export function MessagesPage() {
     }
   };
 
+  const handleTyping = () => {
+    if (socketRef.current && selectedConversation?.id && userData) {
+      socketRef.current.emit('typing_start', {
+        conversationId: selectedConversation.id,
+        username: userData.username,
+      });
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Set new timeout to stop typing after 2 seconds
+      typingTimeoutRef.current = setTimeout(() => {
+        if (socketRef.current && selectedConversation?.id) {
+          socketRef.current.emit('typing_stop', {
+            conversationId: selectedConversation.id,
+          });
+        }
+      }, 2000);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || isSending) return;
     
@@ -139,6 +226,20 @@ export function MessagesPage() {
       if (response.success) {
         setMessages(prev => [...prev, response.message]);
         scrollToBottom();
+        
+        // Emit socket event
+        if (socketRef.current) {
+          socketRef.current.emit('send_message', {
+            conversationId: selectedConversation.id || response.message.conversation_id,
+            receiverId: selectedConversation.participant.id,
+            message: response.message,
+          });
+
+          // Stop typing
+          socketRef.current.emit('typing_stop', {
+            conversationId: selectedConversation.id || response.message.conversation_id,
+          });
+        }
         
         if (!selectedConversation.id) {
           await loadConversations();
@@ -191,54 +292,48 @@ export function MessagesPage() {
   }
 
   return (
-    <div className={`h-screen flex ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
-      {/* Conversations Sidebar - Compact */}
+    <div className={`h-screen flex ${isDark ? 'bg-[#0a0a0a]' : 'bg-white'}`}>
+      {/* Conversations List - LinkedIn Style */}
       <div 
-        className={`w-full md:w-[360px] flex flex-col ${
-          isDark ? 'bg-black border-[#1a1a1a]' : 'bg-white border-gray-200'
+        className={`w-full md:w-[320px] flex flex-col ${
+          isDark ? 'bg-black border-gray-800' : 'bg-white border-gray-200'
         } border-r ${selectedConversation ? 'hidden md:flex' : 'flex'}`}
       >
-        {/* Sidebar Header */}
-        <div className={`px-5 py-5 ${isDark ? 'border-[#1a1a1a]' : 'border-gray-100'} border-b`}>
-          <h1 className="text-2xl font-bold mb-4 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-            Messages
+        {/* Header */}
+        <div className={`px-4 py-4 ${isDark ? 'border-gray-800' : 'border-gray-200'} border-b`}>
+          <h1 className={`text-xl font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Messaging
           </h1>
-          <div className="relative group">
-            <Search className={`absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-600' : 'text-gray-400'} transition-colors`} />
+          <div className="relative">
+            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
             <input
               type="text"
-              placeholder="Search conversations..."
+              placeholder="Search messages"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm font-medium ${
+              className={`w-full pl-10 pr-4 py-2 rounded-md text-sm ${
                 isDark 
-                  ? 'bg-[#111111] border-[#1a1a1a] text-white placeholder-gray-600' 
-                  : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500'
-              } border focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all`}
+                  ? 'bg-[#1a1a1a] border-gray-800 text-white placeholder-gray-500' 
+                  : 'bg-gray-100 border-gray-200 text-gray-900 placeholder-gray-500'
+              } border focus:outline-none focus:ring-1 focus:ring-blue-500`}
             />
           </div>
         </div>
         
-        {/* Conversations List */}
+        {/* Conversations */}
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex justify-center items-center h-64">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
             </div>
           ) : filteredConversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full px-6 py-12">
-              <div className="w-20 h-20 mb-4 bg-gradient-to-br from-blue-500/10 to-purple-600/10 rounded-full flex items-center justify-center">
-                <Send className={`w-10 h-10 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
-              </div>
-              <p className={`text-center font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              <p className={`text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 {searchQuery ? 'No conversations found' : 'No messages yet'}
-              </p>
-              <p className={`text-xs text-center mt-2 ${isDark ? 'text-gray-600' : 'text-gray-500'}`}>
-                Start chatting from a user's profile
               </p>
             </div>
           ) : (
-            <div className="py-1">
+            <div>
               {filteredConversations.map((conv) => (
                 <button
                   key={conv.id}
@@ -246,19 +341,21 @@ export function MessagesPage() {
                     setSelectedConversation(conv);
                     setTimeout(() => inputRef.current?.focus(), 100);
                   }}
-                  className={`w-full px-4 py-3.5 flex items-center gap-3 transition-all ${
+                  className={`w-full px-4 py-3 flex items-start gap-3 transition-colors border-b ${
+                    isDark ? 'border-gray-800' : 'border-gray-100'
+                  } ${
                     selectedConversation?.id === conv.id
                       ? isDark 
-                        ? 'bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-l-4 border-blue-500' 
-                        : 'bg-gradient-to-r from-blue-50 to-purple-50 border-l-4 border-blue-500'
+                        ? 'bg-[#1a1a1a]' 
+                        : 'bg-blue-50'
                       : isDark 
-                        ? 'hover:bg-[#111111]' 
+                        ? 'hover:bg-[#1a1a1a]' 
                         : 'hover:bg-gray-50'
                   }`}
                 >
-                  <div className="relative flex-shrink-0">
+                  <div className="relative flex-shrink-0 mt-1">
                     <div
-                      className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg"
+                      className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium"
                       style={{
                         backgroundImage: conv.participant.avatar_url
                           ? `url(${conv.participant.avatar_url})`
@@ -270,28 +367,28 @@ export function MessagesPage() {
                       {!conv.participant.avatar_url && (conv.participant.full_name?.[0] || conv.participant.username?.[0] || '?').toUpperCase()}
                     </div>
                     {conv.unreadCount > 0 && (
-                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-red-500 to-pink-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg ring-2 ring-black">
-                        {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">{conv.unreadCount > 9 ? '9+' : conv.unreadCount}</span>
                       </div>
                     )}
                   </div>
                   <div className="flex-1 text-left min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {conv.participant.full_name || conv.participant.username}
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-1">
+                        <span className={`font-medium text-sm truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {conv.participant.full_name || conv.participant.username}
+                        </span>
+                        {conv.participant.is_verified && (
+                          <Check className="w-3 h-3 text-blue-500" />
+                        )}
+                      </div>
+                      <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                        {new Date(conv.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      {conv.participant.is_verified && (
-                        <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                          <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-                        </div>
-                      )}
                     </div>
-                    <p className={`text-xs truncate ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-                      {conv.lastMessage || 'Start chatting...'}
+                    <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-medium' : ''} ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {conv.lastMessage || 'Start a conversation'}
                     </p>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(conv.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </button>
               ))}
@@ -300,19 +397,19 @@ export function MessagesPage() {
         </div>
       </div>
 
-      {/* Chat Area */}
+      {/* Chat Area - LinkedIn Style */}
       {selectedConversation ? (
-        <div className={`flex-1 flex flex-col ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
-          {/* Chat Header - Compact */}
-          <div className={`px-6 py-3.5 flex items-center gap-4 ${isDark ? 'bg-black border-[#1a1a1a]' : 'bg-white border-gray-200'} border-b shadow-sm`}>
+        <div className={`flex-1 flex flex-col ${isDark ? 'bg-[#0a0a0a]' : 'bg-white'}`}>
+          {/* Chat Header */}
+          <div className={`px-4 py-3 flex items-center gap-3 ${isDark ? 'bg-black border-gray-800' : 'bg-white border-gray-200'} border-b`}>
             <button 
               onClick={() => setSelectedConversation(null)} 
-              className={`md:hidden p-2 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-100'} transition-colors`}
+              className={`md:hidden p-2 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-100'}`}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div
-              className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0 shadow-lg"
+              className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium flex-shrink-0"
               style={{
                 backgroundImage: selectedConversation.participant.avatar_url
                   ? `url(${selectedConversation.participant.avatar_url})`
@@ -323,59 +420,45 @@ export function MessagesPage() {
               {!selectedConversation.participant.avatar_url && (selectedConversation.participant.full_name?.[0] || '?').toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className={`font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              <div className="flex items-center gap-1">
+                <h2 className={`font-medium text-sm truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {selectedConversation.participant.full_name || selectedConversation.participant.username}
                 </h2>
                 {selectedConversation.participant.is_verified && (
-                  <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                    <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-                  </div>
+                  <Check className="w-3 h-3 text-blue-500" />
                 )}
               </div>
-              <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-                @{selectedConversation.participant.username}
-              </p>
+              {isTyping && typingUser && (
+                <p className="text-xs text-blue-500 animate-pulse">
+                  {typingUser} is typing...
+                </p>
+              )}
             </div>
-            <button className={`p-2 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-100'} transition-colors`}>
+            <button className={`p-2 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-100'}`}>
               <MoreVertical className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Messages Area - SMALLER (30% of space) */}
-          <div 
-            className="flex-1 overflow-y-auto px-6 py-4" 
-            style={{
-              maxHeight: '30vh',
-              backgroundImage: isDark 
-                ? 'radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.03), transparent 50%), radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.03), transparent 50%)'
-                : 'radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.05), transparent 50%), radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.05), transparent 50%)'
-            }}
-          >
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-4">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
-                <div className="w-16 h-16 mb-4 bg-gradient-to-br from-blue-500/10 to-purple-600/10 rounded-full flex items-center justify-center">
-                  <Send className={`w-8 h-8 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
-                </div>
-                <p className={`text-sm font-semibold mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  No messages yet
-                </p>
-                <p className={`text-xs ${isDark ? 'text-gray-600' : 'text-gray-500'}`}>
-                  Send a message to start the conversation
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  No messages yet. Start the conversation!
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {messages.map((message, index) => {
                   const isOwn = message.sender_id === userData?.id;
-                  const showAvatar = index === messages.length - 1 || messages[index + 1]?.sender_id !== message.sender_id;
+                  const showAvatar = index === 0 || messages[index - 1]?.sender_id !== message.sender_id;
                   
                   return (
-                    <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group`}>
-                      <div className={`flex items-end gap-2 max-w-[75%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex items-end gap-2 max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
                         {!isOwn && (
                           <div 
-                            className={`w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}
+                            className={`w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-medium flex-shrink-0 ${showAvatar ? 'opacity-100' : 'opacity-0'}`}
                             style={{
                               backgroundImage: selectedConversation.participant.avatar_url
                                 ? `url(${selectedConversation.participant.avatar_url})`
@@ -388,24 +471,24 @@ export function MessagesPage() {
                         )}
                         <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
                           <div
-                            className={`px-4 py-2 rounded-2xl shadow-sm ${
+                            className={`px-3 py-2 rounded-2xl text-sm ${
                               isOwn
-                                ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-sm'
+                                ? 'bg-blue-600 text-white'
                                 : isDark
-                                ? 'bg-[#1a1a1a] text-white rounded-bl-sm'
-                                : 'bg-white text-gray-900 rounded-bl-sm'
+                                ? 'bg-[#1a1a1a] text-white'
+                                : 'bg-gray-100 text-gray-900'
                             }`}
                           >
-                            <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
+                            <p className="leading-relaxed break-words whitespace-pre-wrap">
                               {message.content}
                             </p>
                           </div>
-                          <div className={`flex items-center gap-1 mt-1 px-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <span className={`text-[10px] ${isDark ? 'text-gray-600' : 'text-gray-500'}`}>
+                          <div className={`flex items-center gap-1 mt-1 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <span className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                               {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                             {isOwn && (
-                              <span className={isDark ? 'text-gray-600' : 'text-gray-500'}>
+                              <span className={isDark ? 'text-gray-500' : 'text-gray-500'}>
                                 {message.is_read ? (
                                   <CheckCheck className="w-3 h-3 text-blue-400" />
                                 ) : (
@@ -424,123 +507,53 @@ export function MessagesPage() {
             )}
           </div>
 
-          {/* Input Area - HUGE (70% of space) */}
-          <div className={`flex flex-col px-6 py-6 gap-4 ${isDark ? 'bg-black border-[#1a1a1a]' : 'bg-white border-gray-200'} border-t`} style={{ minHeight: '40vh' }}>
-            {/* Large Writing Area */}
-            <div className={`flex-1 rounded-3xl ${isDark ? 'bg-[#0a0a0a] border-[#1a1a1a]' : 'bg-gray-50 border-gray-200'} border-2 p-6 flex flex-col`}>
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-800/50">
-                <div
-                  className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold shadow-md"
-                  style={{
-                    backgroundImage: selectedConversation.participant.avatar_url
-                      ? `url(${selectedConversation.participant.avatar_url})`
-                      : undefined,
-                    backgroundSize: 'cover',
-                  }}
-                >
-                  {!selectedConversation.participant.avatar_url && (selectedConversation.participant.full_name?.[0] || '?').toUpperCase()}
-                </div>
-                <div>
-                  <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Message {selectedConversation.participant.full_name || selectedConversation.participant.username}
-                  </p>
-                  <p className={`text-xs ${isDark ? 'text-gray-600' : 'text-gray-500'}`}>
-                    @{selectedConversation.participant.username}
-                  </p>
-                </div>
-              </div>
-              
+          {/* Input - LinkedIn Style */}
+          <div className={`px-4 py-3 ${isDark ? 'bg-black border-gray-800' : 'bg-white border-gray-200'} border-t`}>
+            <div className={`flex items-end gap-2 rounded-lg ${isDark ? 'bg-[#1a1a1a]' : 'bg-gray-50'} px-3 py-2`}>
               <textarea
                 ref={inputRef}
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={(e) => {
+                  setNewMessage(e.target.value);
+                  handleTyping();
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleSendMessage();
                   }
                 }}
-                placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)"
-                className={`flex-1 bg-transparent resize-none outline-none text-base ${isDark ? 'text-white placeholder-gray-600' : 'text-gray-900 placeholder-gray-500'}`}
+                placeholder="Write a message..."
+                className={`flex-1 bg-transparent resize-none outline-none text-sm ${isDark ? 'text-white placeholder-gray-500' : 'text-gray-900 placeholder-gray-500'}`}
                 disabled={isSending}
-                style={{ minHeight: '180px' }}
+                rows={1}
+                style={{ maxHeight: '120px' }}
               />
-              
-              <div className="flex items-center justify-between pt-4 border-t border-gray-800/50 mt-auto">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                    className={`p-3 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-200'} transition-colors group`}
-                    title="Add emoji"
-                  >
-                    <Smile className={`w-5 h-5 ${isDark ? 'text-gray-500 group-hover:text-gray-300' : 'text-gray-600 group-hover:text-gray-900'}`} />
-                  </button>
-                  <button
-                    className={`p-3 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-200'} transition-colors group`}
-                    title="Attach file"
-                  >
-                    <Paperclip className={`w-5 h-5 ${isDark ? 'text-gray-500 group-hover:text-gray-300' : 'text-gray-600 group-hover:text-gray-900'}`} />
-                  </button>
-                  <button
-                    className={`p-3 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-200'} transition-colors group`}
-                    title="Add image"
-                  >
-                    <ImageIcon className={`w-5 h-5 ${isDark ? 'text-gray-500 group-hover:text-gray-300' : 'text-gray-600 group-hover:text-gray-900'}`} />
-                  </button>
-                  <button
-                    className={`p-3 rounded-full ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-200'} transition-colors group`}
-                    title="Voice message"
-                  >
-                    <Mic className={`w-5 h-5 ${isDark ? 'text-gray-500 group-hover:text-gray-300' : 'text-gray-600 group-hover:text-gray-900'}`} />
-                  </button>
-                </div>
-                
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!newMessage.trim() || isSending}
-                  className="px-8 py-3.5 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center gap-2 text-base"
-                >
-                  {isSending ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Sending...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Send Message</span>
-                      <Send className="w-5 h-5" />
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={handleSendMessage}
+                disabled={!newMessage.trim() || isSending}
+                className="p-2 rounded-full bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors flex-shrink-0"
+              >
+                {isSending ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </button>
             </div>
-            
-            {/* Emoji Picker */}
-            {showEmojiPicker && (
-              <div className="absolute bottom-24 left-8 z-50">
-                <EmojiPicker
-                  onEmojiClick={(emojiData) => {
-                    setNewMessage(prev => prev + emojiData.emoji);
-                    setShowEmojiPicker(false);
-                    inputRef.current?.focus();
-                  }}
-                  theme={isDark ? 'dark' : 'light'}
-                />
-              </div>
-            )}
           </div>
         </div>
       ) : (
         <div className="hidden md:flex flex-1 items-center justify-center">
           <div className="text-center max-w-md px-6">
-            <div className="w-32 h-32 mx-auto mb-6 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-full flex items-center justify-center">
-              <Send className={`w-16 h-16 ${isDark ? 'text-gray-700' : 'text-gray-400'}`} />
+            <div className={`w-24 h-24 mx-auto mb-4 ${isDark ? 'bg-gray-800' : 'bg-gray-100'} rounded-full flex items-center justify-center`}>
+              <Send className={`w-12 h-12 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} />
             </div>
-            <h3 className={`text-2xl font-bold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <h3 className={`text-xl font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
               Select a conversation
             </h3>
-            <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-              Choose a conversation from the list to start messaging or visit a user's profile to send them a message
+            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              Choose from your existing conversations or start a new one
             </p>
           </div>
         </div>
