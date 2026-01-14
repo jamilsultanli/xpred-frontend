@@ -33,9 +33,18 @@ export function MessagesPage() {
   // Initialize Socket.IO connection
   useEffect(() => {
     if (isAuthenticated && token) {
-      const socket = io('http://localhost:3001', {
+      // Get WebSocket URL from API base URL
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const wsUrl = apiBaseUrl.replace(/^http/, 'ws').replace(/^https/, 'wss');
+      
+      console.log('🔌 Connecting to WebSocket:', wsUrl);
+      
+      const socket = io(apiBaseUrl, {
         auth: { token },
         transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
       });
 
       socket.on('connect', () => {
