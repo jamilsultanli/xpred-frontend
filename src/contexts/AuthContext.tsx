@@ -5,6 +5,7 @@ import { apiClient } from '../lib/api/client';
 import { toast } from 'sonner';
 
 interface UserData {
+  id: string;
   email: string;
   name: string;
   username?: string;
@@ -87,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   const userResponse = await authApi.getCurrentUser();
                   if (userResponse.success && userResponse.user) {
                     const userData = {
+                      id: userResponse.user.id,
                       email: userResponse.user.email || '',
                       name: userResponse.user.full_name || userResponse.user.username || '',
                       username: userResponse.user.username,
@@ -154,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (isMounted) {
                 setIsAuthenticated(true);
                 setUserData({
+                  id: cachedUser.id,
                   email: cachedUser.email || '',
                   name: cachedUser.full_name || cachedUser.username || '',
                   username: cachedUser.username,
@@ -171,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const userResponse = await authApi.getCurrentUser();
               if (userResponse.success && userResponse.user) {
                 const userData = {
+                  id: userResponse.user.id,
                   email: userResponse.user.email || '',
                   name: userResponse.user.full_name || userResponse.user.username || '',
                   username: userResponse.user.username,

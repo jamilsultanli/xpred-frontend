@@ -43,7 +43,8 @@ export const messagesApi = {
     success: boolean;
     conversations: Conversation[];
   }> => {
-    return apiClient.get('/messages');
+    // Messaging needs fresh data (polling). Disable cache.
+    return apiClient.get('/messages', { enabled: false });
   },
 
   // Get messages in a conversation
@@ -56,7 +57,8 @@ export const messagesApi = {
       hasMore: boolean;
     };
   }> => {
-    return apiClient.get(`/messages/${conversationId}?page=${page}`);
+    // Messaging needs fresh data (polling). Disable cache.
+    return apiClient.get(`/messages/${conversationId}?page=${page}`, { enabled: false });
   },
 
   // Send a message
@@ -96,6 +98,6 @@ export const messagesApi = {
     success: boolean;
     unreadCount: number;
   }> => {
-    return apiClient.get('/messages/unread-count');
+    return apiClient.get('/messages/unread-count', { enabled: false });
   },
 };
