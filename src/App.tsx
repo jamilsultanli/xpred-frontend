@@ -26,6 +26,7 @@ import { XPMarketPage } from './components/XPMarketPage';
 import { FollowersPage } from './components/FollowersPage';
 import { FollowingPage } from './components/FollowingPage';
 import { AllActivePredictionsPage } from './components/AllActivePredictionsPage';
+import { PredictionDetailPage } from './components/PredictionDetailPage';
 import { LoginModal } from './components/LoginModal';
 import { OnboardingFlow } from './components/OnboardingFlow';
 import { CreatePredictionModal } from './components/CreatePredictionModal';
@@ -284,6 +285,7 @@ function AppContent() {
             <Route path="/user/:username" element={<ProfileRoute />} />
             <Route path="/user/:username/followers" element={<FollowersRoute />} />
             <Route path="/user/:username/following" element={<FollowingRoute />} />
+            <Route path="/prediction/:id/:slug?" element={<PredictionDetailPage />} />
             <Route path="/notifications" element={<NotificationsPageWrapper />} />
             <Route path="/bookmarks" element={<BookmarksPageWrapper />} />
             <Route path="/settings" element={<SettingsPage />} />

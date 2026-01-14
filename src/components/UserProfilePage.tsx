@@ -68,7 +68,7 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
   const { isAuthenticated, setShowLoginModal, userData } = useAuth();
   const navigate = useNavigate();
   const isDark = theme === 'dark';
-  const [activeTab, setActiveTab] = useState<'predictions' | 'completed' | 'likes' | 'media'>('predictions');
+  const [activeTab, setActiveTab] = useState<'predictions' | 'completed'>('predictions');
   const [isFollowing, setIsFollowing] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -79,7 +79,7 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
   const [ownerStats, setOwnerStats] = useState<{
     totalXP: number;
     totalXC: number;
-    totalPredictions: number;
+    activePredictions: number;
     winRate: number;
   } | null>(null);
 
@@ -117,7 +117,7 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
           setOwnerStats({
             totalXP: resp.stats.totalXP || 0,
             totalXC: resp.stats.totalXC || 0,
-            totalPredictions: resp.stats.totalPredictions || 0,
+            activePredictions: resp.stats.activeBets || 0,
             winRate: resp.stats.winRate || 0,
           });
         }
@@ -151,10 +151,6 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
         fetchPredictions();
       } else if (activeTab === 'completed') {
         fetchCompletedPredictions();
-      } else if (activeTab === 'likes') {
-        fetchLikedPredictions();
-      } else if (activeTab === 'media') {
-        fetchMediaPredictions();
       }
     }
   }, [user, activeTab]);
@@ -206,40 +202,6 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
       }
     } catch (error: any) {
       console.error('Error fetching predictions:', error);
-      setPredictions([]);
-    }
-  };
-
-  const fetchLikedPredictions = async () => {
-    try {
-      // Fetch all predictions and filter liked ones
-      const response = await usersApi.getPredictions(username, 1, 100);
-      if (response.success && response.predictions) {
-        const likedPredictions = response.predictions.filter((p: any) => p.is_liked);
-        const mapped = likedPredictions.map((p: any) => 
-          mapApiPrediction(p, user?.username || username, user?.full_name || user?.username || 'Unknown')
-        );
-        setPredictions(mapped);
-      }
-    } catch (error: any) {
-      console.error('Error fetching liked predictions:', error);
-      setPredictions([]);
-    }
-  };
-
-  const fetchMediaPredictions = async () => {
-    try {
-      // Fetch all predictions and filter media ones
-      const response = await usersApi.getPredictions(username, 1, 100);
-      if (response.success && response.predictions) {
-        const mediaPredictions = response.predictions.filter((p: any) => p.market_image || p.market_video);
-        const mapped = mediaPredictions.map((p: any) => 
-          mapApiPrediction(p, user?.username || username, user?.full_name || user?.username || 'Unknown')
-        );
-        setPredictions(mapped);
-      }
-    } catch (error: any) {
-      console.error('Error fetching media predictions:', error);
       setPredictions([]);
     }
   };
@@ -556,8 +518,8 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
                   <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total XC</div>
                 </div>
                 <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
-                  <div className="text-2xl font-bold text-green-500">{ownerStats?.totalPredictions ?? 0}</div>
-                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Predictions</div>
+                  <div className="text-2xl font-bold text-green-500">{ownerStats?.activePredictions ?? 0}</div>
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Predictions</div>
                 </div>
                 <div className={`${isDark ? 'bg-[#16181c]' : 'bg-gray-100'} rounded-xl p-4 text-center`}>
                   <div className="text-2xl font-bold text-yellow-500">{(ownerStats?.winRate ?? 0).toFixed(1)}%</div>
@@ -594,26 +556,6 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
           >
             Completed
           </button>
-          <button
-            onClick={() => setActiveTab('likes')}
-            className={`flex-1 py-4 font-semibold transition-colors ${
-              activeTab === 'likes'
-                ? 'border-b-4 border-blue-500'
-                : isDark ? 'text-gray-400 hover:bg-gray-900' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            Likes
-          </button>
-          <button
-            onClick={() => setActiveTab('media')}
-            className={`flex-1 py-4 font-semibold transition-colors ${
-              activeTab === 'media'
-                ? 'border-b-4 border-blue-500'
-                : isDark ? 'text-gray-400 hover:bg-gray-900' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            Media
-          </button>
         </div>
       </div>
 
@@ -638,28 +580,6 @@ export function UserProfilePage({ username }: UserProfilePageProps) {
           ) : (
             <div className={`p-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               No completed predictions yet
-            </div>
-          )
-        )}
-        {activeTab === 'likes' && (
-          predictions.length > 0 ? (
-            predictions.map((prediction) => (
-              <PredictionCard key={prediction.id} prediction={prediction} onProfileClick={onProfileClick} />
-            ))
-          ) : (
-            <div className={`p-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              No liked predictions yet
-            </div>
-          )
-        )}
-        {activeTab === 'media' && (
-          predictions.length > 0 ? (
-            predictions.map((prediction) => (
-              <PredictionCard key={prediction.id} prediction={prediction} onProfileClick={onProfileClick} />
-            ))
-          ) : (
-            <div className={`p-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              No media predictions yet
             </div>
           )
         )}

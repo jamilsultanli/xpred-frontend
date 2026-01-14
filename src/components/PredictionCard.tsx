@@ -6,6 +6,7 @@ import { PlaceBetModal } from './PlaceBetModal';
 import { CommentsModal } from './CommentsModal';
 import { Prediction } from '../types';
 import { toast } from 'sonner';
+import { slugify } from '../lib/slugify';
 import { bookmarksApi } from '../lib/api/bookmarks';
 import { repostsApi } from '../lib/api/reposts';
 import { reportsApi } from '../lib/api/reports';
@@ -135,7 +136,7 @@ export function PredictionCard({ prediction, onProfileClick, onDelete }: Predict
   };
 
   const handleCopyLink = () => {
-    const url = `${window.location.origin}/prediction/${prediction.id}`;
+    const url = `${window.location.origin}/prediction/${prediction.id}/${slugify(prediction.question)}`;
     navigator.clipboard.writeText(url).then(() => {
       toast.success('Link copied to clipboard');
     }).catch(() => {
@@ -593,7 +594,7 @@ export function PredictionCard({ prediction, onProfileClick, onDelete }: Predict
       <ShareModal
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}
-        url={`/prediction/${prediction.id}`}
+        url={`/prediction/${prediction.id}/${slugify(prediction.question)}`}
         title={prediction.question}
         description={prediction.description}
       />

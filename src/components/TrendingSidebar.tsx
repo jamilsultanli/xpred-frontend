@@ -4,8 +4,9 @@ import { TrendingUp, Users, Loader2, HelpCircle, FileText, Shield, Info, Mail, A
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { exploreApi } from '../lib/api/explore';
-import { leaderboardApi } from '../lib/api/leaderboard';
 import { socialApi } from '../lib/api/social';
+import { usersApi } from '../lib/api/users';
+import { slugify } from '../lib/slugify';
 import { toast } from 'sonner';
 
 export function TrendingSidebar() {
@@ -37,7 +38,8 @@ export function TrendingSidebar() {
           rank: index + 1,
           topic: p.category || 'General',
           question: p.question,
-          predictions: p.total_pot_xp ? (p.total_pot_xp >= 1000 ? `${(p.total_pot_xp / 1000).toFixed(1)}K` : p.total_pot_xp.toString()) : '0',
+          // Trending should be XC-based
+          xc: p.total_pot_xc ? (p.total_pot_xc >= 1000 ? `${(p.total_pot_xc / 1000).toFixed(1)}K` : p.total_pot_xc.toString()) : '0',
           id: p.id,
         })));
       }
@@ -51,35 +53,25 @@ export function TrendingSidebar() {
   const loadSuggestedUsers = async () => {
     setIsLoadingSuggested(true);
     try {
-      // Get top users from leaderboard as suggestions
-      const response = await leaderboardApi.getLeaderboard({ type: 'xp', period: 'all_time', limit: 10 });
-      if (response.success && response.leaderboard) {
-        // Filter out current user and users already followed
-        const suggested = response.leaderboard
-          .filter((entry: any) => entry.user.username !== userData?.username)
-          .slice(0, 3)
-          .map((entry: any) => ({
-            name: entry.user.full_name || entry.user.username,
-            username: entry.user.username,
-            avatar: entry.user.avatar_url,
-            title: entry.user.title,
-            tag: entry.user.title || 'Top Predictor',
-            id: entry.user.id,
+      // Use backend suggestions: excludes already-followed users, returns ~3-4 good options
+      const response = await usersApi.getSuggestedUsers(undefined, 4);
+      if (response.success && (response as any).users) {
+        const suggested = (response as any).users
+          .filter((u: any) => u.username !== userData?.username && !u.isFollowing)
+          .slice(0, 4)
+          .map((u: any) => ({
+            name: u.displayName || u.username,
+            username: u.username,
+            avatar: u.avatar_url,
+            title: u.title,
+            tag: u.title || 'Suggested',
+            id: u.id,
           }));
+
         setSuggestedUsers(suggested);
-        
-        // Check follow status for each user
+        // none should be followed already
         const statuses: Record<string, boolean> = {};
-        for (const user of suggested) {
-          try {
-            const statusResponse = await socialApi.getFollowStatus(user.id);
-            if (statusResponse.success) {
-              statuses[user.id] = statusResponse.following;
-            }
-          } catch {
-            statuses[user.id] = false;
-          }
-        }
+        suggested.forEach((u) => (statuses[u.id] = false));
         setFollowingStatus(statuses);
       }
     } catch (error) {
@@ -131,7 +123,7 @@ export function TrendingSidebar() {
                 <button
                   key={item.id || item.rank}
                   onClick={() => {
-                    navigate(`/explore?category=${encodeURIComponent(item.topic)}`);
+                    navigate(`/prediction/${item.id}/${slugify(item.question)}`);
                   }}
                   className={`w-full px-4 py-3 ${isDark ? 'hover:bg-gray-900' : 'hover:bg-gray-100'} transition-colors text-left border-b ${isDark ? 'border-gray-800' : 'border-gray-200'} last:border-b-0`}
                 >
@@ -143,7 +135,7 @@ export function TrendingSidebar() {
                         <span className="text-blue-500">Trending</span>
                       </div>
                       <div className="font-semibold text-sm line-clamp-2">{item.question}</div>
-                      <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'} mt-1`}>{item.predictions} predictions</div>
+                      <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-600'} mt-1`}>{item.xc} XC</div>
                     </div>
                     <div className={`text-2xl font-bold ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>#{item.rank}</div>
                   </div>
