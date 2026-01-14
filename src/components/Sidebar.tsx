@@ -3,7 +3,6 @@ import { Home, Compass, Trophy, Bell, Bookmark, Users, User, PlusCircle, LogOut,
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadCounts, formatCount } from '../hooks/useUnreadCounts';
-import { ActiveBets } from './ActiveBets';
 
 interface SidebarProps {
   onCreateClick: () => void;
@@ -94,14 +93,6 @@ export function Sidebar({ onCreateClick }: SidebarProps) {
             </Link>
           );
         })}
-
-        {/* Sidebar section: Active Predictions (moved from Home) */}
-        {isAuthenticated && (
-          <div className={`mt-3 rounded-2xl border ${isDark ? 'border-gray-800 bg-[#0b0d10]' : 'border-gray-200 bg-white'} overflow-hidden`}>
-            <ActiveBets variant="sidebar" />
-          </div>
-        )}
-        
         <button 
           onClick={() => {
             if (!isAuthenticated) {
